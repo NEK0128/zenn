@@ -1,5 +1,5 @@
 ---
-title: "LLMをプロダクトに実装したら2日で月額予算が消えた —— Databricks ai_queryの本番運用とコスト監視の実践"
+title: "LLMのプロダクト利用とAI破産を回避する運用体制"
 emoji: "💰"
 type: "tech"
 topics: ["Databricks", "LLM", "コスト管理", "AI", "データエンジニアリング"]
