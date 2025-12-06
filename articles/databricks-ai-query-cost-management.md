@@ -3,7 +3,7 @@ title: "LLMのプロダクト利用とAI破産を回避する運用体制"
 emoji: "💰"
 type: "tech"
 topics: ["Databricks", "LLM", "コスト管理", "AI", "データエンジニアリング"]
-published: false
+published: true
 ---
 
 こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))と申します。今まで「マツケン」というあだ名しかつかなかったのですが、社内では長いからという理由でKJと呼ばれるようになりました。
