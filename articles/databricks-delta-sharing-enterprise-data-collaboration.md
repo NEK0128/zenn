@@ -4,6 +4,7 @@ emoji: "🔗"
 type: "tech"
 topics: ["Databricks", "DeltaSharing", "データ連携"]
 published: false
+publication_name: "ivry"
 ---
 
 # はじめに
