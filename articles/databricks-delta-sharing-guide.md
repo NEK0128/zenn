@@ -3,13 +3,14 @@ title: "Delta Sharingで実現するセキュアな企業間データ連携 —�
 emoji: "🔗"
 type: "tech"
 topics: ["Databricks", "DeltaSharing", "データ連携"]
-published: false
+published: true
+published_at: 2025-12-10 09:00
 publication_name: "ivry"
 ---
 
 # はじめに
 
-本記事は、Databricks Adevent Calendar 2025 10日目の記事です。
+本記事は、Databricks Advent Calendar 2025 10日目の記事です。
 https://adventar.org/calendars/11552
 
 こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))と申します。趣味はビリヤードでプロの試合にも出ていたりするぐらい割とガチでやっています。先日も尼崎でプロの一番大きな大会に出場しました！1勝もできませんでしたが笑
@@ -18,7 +19,9 @@ https://adventar.org/calendars/11552
 
 本記事はビリヤードの記事とは全く関係なく、Databricksを活用した企業間データ連携についてお話ししますのでご安心ください！
 
-今の時代、AIを最大限に活用するためにデータは必要不可欠で、さらに、自社だけでなく他企業とデータ連携することでより大きな価値を生み出すことができます。
+今の時代、AIを最大限に活用するためにデータは必要不可欠で、さらに、自社だけでなく他企業とデータ連携することでより大きな価値を生み出すことができます。また、コンテキストエンジニアリングでも、AIエージェントがタスクを適切に実行するには複数ソースから正しい"文脈"を取得する必要があると言われています。
+
+https://blog.langchain.com/the-rise-of-context-engineering/
 
 例えばIVRyでは、お客様のデータを取り込むことでAIによるパーソナライズした提案が可能になり、また、IVRyのプロダクトで得られたデータをお客様に返却し、独自の分析に活用いただくこともできます。
 
@@ -129,11 +132,7 @@ Delta Sharingを利用するには、メタストア管理者の設定が必要�
 
 #### Step 5: [提供側]共有するデータを選択
 
-カタログから該当のテーブル（またはスキーマ）を選択し、「Delta Sharing経由で共有」を実行します。
-
-![Delta Sharing register data 1](/images/ds_7.png)
-
-共有名を任意で設定し、受信者を先ほど作成したものに指定します。
+カタログから該当のテーブル（またはスキーマ）を選択し、「Delta Sharing経由で共有」を実行します。共有名を任意で設定し、受信者を先ほど作成したものに指定します。
 
 ![Delta Sharing register data 2](/images/ds_8.png)
 
