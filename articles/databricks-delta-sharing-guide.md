@@ -11,7 +11,7 @@ publication_name: "ivry"
 # はじめに
 
 本記事は、Databricks Advent Calendar 2025 10日目の記事です。
-https://adventar.org/calendars/11552
+https://qiita.com/advent-calendar/2025/databricks
 
 こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))と申します。趣味はビリヤードでプロの試合にも出ていたりするぐらい割とガチでやっています。先日も尼崎でプロの一番大きな大会に出場しました！1勝もできませんでしたが笑
 
