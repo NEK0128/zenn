@@ -10,11 +10,11 @@ publication_name: "ivry"
 # はじめに
 
 本記事は、Databricks Advent Calendar 2025 16日目の記事です。
-<https://qiita.com/advent-calendar/2025/databricks>
+https://qiita.com/advent-calendar/2025/databricks
 
 こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))と申します。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。最近ビリヤードのキューを買いました！見てくださいこの派手さ！一目惚れして、なんと40万円も奮発してしまいました！
 
-![billiard](/images/IMG_2860.jpg)
+![billiard](/images/databricks-cost-optimization-tips/IMG_2860.jpg)
 
 ビリヤードの話は無限にできるのでここらへんで切り上げて、本題のDatabricksのコスト最適化についてお話しします。ビリヤードの小話はまた次回のブログをお楽しみに！
 
@@ -39,7 +39,7 @@ IVRyでは、データ分析基盤としてBigQueryを利用していました�
 
 ![Databricksアーキテクチャ](/images/databricks-cost-optimization-tips/アーキテクチャ.png)
 
-<https://findy-tools.io/companies/ivry/90/76>
+https://findy-tools.io/companies/ivry/90/76
 
 しかし、**そのまま移行しただけではコストはむしろ増加**しました。
 
@@ -55,9 +55,9 @@ Databricksは各クラウドプロバイダー上に構築されます。Databri
 
 IVRyではAWS上でDatabricksを利用しているため、**Databricksの利用料金**と**AWSのリソース料金（EC2、S3、ネットワーク等）の両方**が発生します。
 
-![Databricks On Cloud Provider](images/databricks-cost-optimization-tips/architecture-c2c83d23e2f7870f30137e97aaadea0b.png)
+![Databricks On Cloud Provider](/images/databricks-cost-optimization-tips/architecture.png)
 
-<https://docs.databricks.com/aws/en/getting-started/high-level-architecture>
+https://docs.databricks.com/aws/en/getting-started/high-level-architecture
 
 ## DBU（Databricks Unit）について
 
@@ -75,7 +75,7 @@ Databricksの課金単位は**DBU（Databricks Unit）**です。DBUは処理能
 
 正直、プロダクトごとに料金が異なるため結構複雑ですよね。。Jobs ComputeはAll-Purpose Computeよりも1DBUあたりの単価が安いため、バッチ処理にはJobs Computeを使用するなど、用途に応じた適切なプロダクト選定がコスト最適化の鍵となります。
 
-<https://www.databricks.com/jp/product/pricing>
+https://www.databricks.com/jp/product/pricing
 
 ## サーバレスとクラシックコンピュート
 
@@ -90,7 +90,7 @@ Databricksには**サーバレス**と**クラシックコンピュート**の2�
 
 クラシックコンピュートは利用しているクラウドのコンピュートリソースを直接使用します。IVRyの場合はAWSのEC2インスタンスを利用するため、**DatabricksのDBU料金**と**AWSのEC2料金**の両方が発生します。そのため、EC2も考慮したコスト最適化が必要です。
 
-<https://docs.databricks.com/aws/ja/compute/use-compute>
+https://docs.databricks.com/aws/ja/compute/use-compute
 
 # コスト最適化の具体的な施策
 
@@ -108,9 +108,9 @@ Photonは高速なクエリ実行を実現する機能ですが追加でDBU消�
 
 Sparkは大規模データを複数のノードで分散処理し、効率的に処理する技術でIVRyでも幅広く利用しています。Sparkクラスターは、ジョブを管理するDriverノードと実際の処理を行うWorkerノードで構成されます。
 
-![Sparkクラスター構成](/images/databricks-cost-optimization-tips/spark-cluster.png)
+![Sparkクラスター構成](/images/databricks-cost-optimization-tips/spark_cluster.png)
 
-<https://qiita.com/taka_yayoi/items/31190da754106b2d284e>
+https://qiita.com/taka_yayoi/items/31190da754106b2d284e
 
 Driverノードは中断されるとジョブ全体がエラーになりますが、Workerノードは中断されても他のWorkerで復旧可能です。この特性を活かし、Workerのみスポットインスタンスに切り替えました。
 
