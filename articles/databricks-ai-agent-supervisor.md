@@ -64,7 +64,7 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 データはUnity Catalogに格納されており、UDFsを通じてアクセスします。
 
-# 実装
+# やってみた
 
 ## UDFsの作成
 
@@ -366,7 +366,7 @@ print(result["messages"][-1].content)
 4. **資料作成Agent**が収集した情報をもとに提案資料のドラフトを生成
 5. **Supervisor**が結果を統合してユーザーに回答
 
-# MLflowの便利な機能
+# MLflowを使ってみて便利だったこと
 
 今回利用したMLflowについて、特に便利だった機能を紹介します。
 
@@ -391,7 +391,7 @@ MLflowでモデルをバージョン管理できるため、プロンプトや�
 ![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.avif)
 *引用: [Workspace Model Registry の例](https://docs.databricks.com/aws/ja/mlflow/workspace-model-registry-example)*
 
-# Agent Bricksへの期待
+# 今後の展望 — Agent Bricksへの期待
 
 現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。とても待ち遠しいです。
 https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
