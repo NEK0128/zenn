@@ -1,8 +1,8 @@
 ---
-title: "Databricksでスーパーバイザー型マルチエージェントを構築した話"
+title: "DatabricksでSupervisor型マルチAgentを構築した話"
 emoji: "🤖"
 type: "tech"
-topics: ["Databricks", "LangGraph", "AIエージェント", "MLflow", "Python"]
+topics: ["Databricks", "LangGraph", "AIAgent", "MLflow", "Python"]
 published: false
 publication_name: "ivry"
 ---
@@ -20,28 +20,28 @@ publication_name: "ivry"
 
 # はじめに
 
-今回は、社内の業務効率化のためにAIエージェントの仕組みをDatabricks上に構築した話をします。具体的には、LangGraphを使ったスーパーバイザー型マルチエージェントの設計・実装から、MLflowでの管理、Databricksでの運用までを紹介します。
+今回は、社内の業務効率化のためにAI Agentの仕組みをDatabricks上に構築した話をします。具体的には、LangGraphを使ったSupervisor型マルチAgentの設計・実装から、MLflowでの管理、Databricksでの運用までを紹介します。
 
-私は半年前までAIエージェントを使ったことすらないレベルでしたが、Databricksを使うことでかなり簡単にいいものができました。同じ境遇の方の参考になれば幸いです。
+私は半年前までAI Agentを使ったことすらないレベルでしたが、Databricksを使うことでかなり簡単にいいものができました。同じ境遇の方の参考になれば幸いです。
 
-# エージェントの背景
+# Agentの背景
 
-IVRyは電話のサービスの会社であり、社員自身も営業活動の中でIVRyサービスをドッグフーディング的に利用しています。そこから得られるデータや関連するビジネスコミュニケーションデータを活用すれば、セールスチームの業務を支援する社内エージェントが作れるのではないかと考え、実験を進めています。
+IVRyは電話のサービスの会社であり、社員自身も営業活動の中でIVRyサービスをドッグフーディング的に利用しています。そこから得られるデータや関連するビジネスコミュニケーションデータを活用すれば、セールスチームの業務を支援する社内Agentが作れるのではないかと考え、実験を進めています。
 
 例えば、アポイントメント電話の終話直後に次回のミーティング資料が自動生成されている、といった体験を目指しています。現在はダミーデータを使いながらこの仕組みを検証している段階です。
 
 ![AI Agentでセールス活動の効率化](/images/databricks-ai-agent-supervisor.md/ysdyt.png)
 *引用: [Databricks After Party 2025 LTスライド](https://ysdyt.dev/posts/2025/12/databricks-after-party-2025-LT)*
 
-あらゆるデータがDatabricksに集まっている環境を活かし、LangGraphベースのAIエージェントをDatabricks上に構築しました。エージェントに求められたのは、複数の異なるデータソースにアクセスしながら、ユーザーがボタン一つで資料のドラフトを作成できる機能です。
+あらゆるデータがDatabricksに集まっている環境を活かし、LangGraphベースのAI AgentをDatabricks上に構築しました。Agentに求められたのは、複数の異なるデータソースにアクセスしながら、ユーザーがボタン一つで資料のドラフトを作成できる機能です。
 
-1つのエージェントで全てを処理するのではなく、役割ごとにエージェントを分割し、それを統括するSupervisor Agentが全体を制御するアーキテクチャを採用しました。
+1つのAgentで全てを処理するのではなく、役割ごとにAgentを分割し、それを統括するSupervisor Agentが全体を制御するアーキテクチャを採用しました。
 
-# エージェントの設計
+# Agentの設計
 
 ## Supervisor Agentにした理由
 
-マルチエージェントのアーキテクチャにはいくつかのパターンがあります。シーケンシャル（順番に処理）、ルーティング（入力に応じて振り分け）、そしてスーパーバイザー（管理Agentが全体を監督）などです。
+マルチAgentのアーキテクチャにはいくつかのパターンがあります。シーケンシャル（順番に処理）、ルーティング（入力に応じて振り分け）、そしてSupervisor（管理Agentが全体を監督）などです。
 
 Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエストを受け取り、内容を解析した上で適切なサブAgentに処理を委譲するアーキテクチャです。各サブAgentは専門的な役割を持ち、必要なツールやデータにアクセスして結果を返します。Supervisor Agentはそれらの結果を統合し、最終的な回答をユーザーに返します。
 
@@ -53,7 +53,7 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 ## アーキテクチャの全体像
 
-実際に構築したマルチエージェントは以下のような構成です。
+実際に構築したマルチAgentは以下のような構成です。
 
 ![Supervisor Agentの構成](/images/databricks-ai-agent-supervisor.md/supervisor_agent.png)
 
@@ -68,7 +68,7 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 ## UDFsの作成
 
-エージェントが自由にデータにアクセスすると予期せぬ挙動が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)を作成してアクセスを制限しました。これによりデータ取得の揺らぎを最小限にしています。
+Agentが自由にデータにアクセスすると予期せぬ挙動が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)を作成してアクセスを制限しました。これによりデータ取得の揺らぎを最小限にしています。
 
 以下のようにSQLを実行すればUnity Catalog上に関数を作ることができます。ただ、まだTerraformで管理できないので、今後のアップデートが待ち遠しいですね。
 
@@ -93,7 +93,7 @@ RETURN
     LIMIT 20
 ```
 
-## エージェント定義の作成
+## Agent定義の作成
 
 各サブAgentは、Pythonファイルとして定義します。以下は従業員検索Agentの例です。LangGraphの`create_react_agent`を使い、UDFsをツールとして渡すだけでAgentが作れます。ポイントは以下の4ステップです。
 
@@ -149,7 +149,7 @@ mlflow.models.set_model(agent)
 
 ## MLflowでのサブAgent登録
 
-作成したエージェント定義ファイルを、**MLflow**を使ってUnity Catalogに登録します。これにより、バージョン管理やデプロイが容易になります。
+作成したAgent定義ファイルを、**MLflow**を使ってUnity Catalogに登録します。これにより、バージョン管理やデプロイが容易になります。
 
 まず、共通設定とトレーシングの有効化です。トレーシングを有効にすると実行時のプロンプト情報などが記録され、後の評価に役立ちます。
 
@@ -242,7 +242,7 @@ print(f"Agent 登録完了! Version: {result['version']}")
 
 ## MLflowでのSupervisor Agent登録
 
-次にサブエージェントを呼び出すSupervisor Agentを登録します。定義ファイルは以下のようになります。
+次にサブAgentを呼び出すSupervisor Agentを登録します。定義ファイルは以下のようになります。
 
 Supervisor Agentのポイントは、サブAgentを`@tool`で定義してツールとして呼び出す点です。
 
@@ -346,16 +346,16 @@ result_supervisor = register_agent(
 print(f"Supervisor Agent 登録完了! Version: {result_supervisor['version']}")
 ```
 
-## エージェントを使用する
+## Agentを使用する
 
-登録したエージェントは`mlflow.langchain.load_model`でロードするだけで実行できます。
+登録したAgentは`mlflow.langchain.load_model`でロードするだけで実行できます。
 
 ```python
 import mlflow
 
 mlflow.set_registry_uri("databricks-uc")
 
-# Unity Catalogからエージェントをロード
+# Unity CatalogからAgentをロード
 model_uri = "models:/dummy_catalog.dummy_schema.proposal_supervisor_agent@latest"
 agent = mlflow.langchain.load_model(model_uri)
 
@@ -368,7 +368,7 @@ print(result["messages"][-1].content)
 
 実際に実行すると、Supervisorが質問内容を解析し、以下のような流れで処理されます。
 
-1. **Supervisor**が質問を解析し、必要なサブエージェントを判断
+1. **Supervisor**が質問を解析し、必要なサブAgentを判断
 2. **従業員検索Agent**が「田中さん」の従業員情報を特定
 3. **議事録取得Agent**が田中さんに関連するミーティングの議事録を取得
 4. **資料作成Agent**が収集した情報をもとに提案資料のドラフトを生成
@@ -380,13 +380,13 @@ print(result["messages"][-1].content)
 
 ## MLflow Tracing
 
-`mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動的にトレーシングされます。Supervisorがどのサブエージェントを呼び出し、どのような結果が返ってきたかが可視化されるため、デバッグやモデルの改善に役立ちます。
+`mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動的にトレーシングされます。SupervisorがどのサブAgentを呼び出し、どのような結果が返ってきたかが可視化されるため、デバッグやモデルの改善に役立ちます。
 
 (後ほど図を入れる。)
 
-## Evaluation
+## 評価
 
-MLflowのEvaluation機能を使うことで、Agentの回答品質を定量的に評価できます。事前に用意した質問と期待する回答のペアに対して、実際のAgentの回答がどの程度一致するかを測定できます。
+MLflowの評価機能を使うことで、Agentの回答品質を定量的に評価できます。事前に用意した質問と期待する回答のペアに対して、実際のAgentの回答がどの程度一致するかを測定できます。
 
 (後ほど図を入れる。)
 
@@ -396,21 +396,21 @@ MLflowでモデルをバージョン管理できるため、プロンプトや�
 
 # Agent Bricksへの期待
 
-現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にエージェントを作成できるようになります。とても待ち遠しいです。
+現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。とても待ち遠しいです。
 <https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/>
 
-Databricksのエージェント関連の機能はアップデートが非常に活発で、新機能のリリースが続いています。今後の進化がとても楽しみです！
+DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いています。今後の進化がとても楽しみです！
 
 # まとめ
 
-本記事では、Databricks上でLangGraphを使ったスーパーバイザー型マルチエージェントを構築した事例を紹介しました。
+本記事では、Databricks上でLangGraphを使ったSupervisor型Multi-Agentを構築した事例を紹介しました。
 
-- **スーパーバイザーパターン**を採用し、関心の分離・拡張性・デバッグのしやすさを実現
-- **LangGraph**でエージェント間のワークフローをグラフとして定義
-- **MLflow**でエージェントの登録・トレーシング・評価を管理
+- **Supervisorパターン**を採用し、関心の分離・拡張性・デバッグのしやすさを実現
+- **LangGraph**でAgent間のワークフローをグラフとして定義
+- **MLflow**でAgentの登録・トレーシング・評価を管理
 - **Databricks Asset Bundles**でデプロイをコード管理
 
-Databricksのエコシステムを活用することで、開発からデプロイまでを一気通貫で行える環境が整っています。今までAIエージェントを作ったことがなく、社内で実験的に試してみたい方にはお勧めです。さらにDatabricks Appsと組み合わせればエージェントを使った社内アプリも簡単に構築できます。こういったトータルソリューションで展開できるところもDatabricksの魅力の一つです。
+Databricksのエコシステムを活用することで、開発からデプロイまでを一気通貫で行える環境が整っています。今までAI Agentを作ったことがなく、社内で実験的に試してみたい方にはお勧めです。さらにDatabricks Appsと組み合わせればAgentを使った社内アプリも簡単に構築できます。こういったトータルソリューションで展開できるところもDatabricksの魅力の一つです。
 
 ---
 
