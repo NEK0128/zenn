@@ -1,0 +1,420 @@
+---
+title: "Databricksでスーパーバイザー型マルチエージェントを構築した話"
+emoji: "🤖"
+type: "tech"
+topics: ["Databricks", "LangGraph", "AIエージェント", "MLflow", "Python"]
+published: false
+publication_name: "ivry"
+---
+
+
+こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
+
+今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことで感動しました！
+
+そして、優勝するとビリヤード台の上でパフォーマンスをするという伝統があるのですが、日本人選手は靴を脱いで台に上がりました！日本人らしさを感じますね笑
+
+![優勝した瞬間（引用元: https://www.billiards-days.com/20260210-1/）](https://storage.googleapis.com/zenn-user-upload/@zenn/images/databricks-ai-agent-supervisor.md/billiards.jpg)
+
+さて、本日のビリヤードの話はこのへんで切り上げて本題に入ります！
+
+# はじめに
+
+今回は、社内の業務効率化のためにAIエージェントの仕組みをDatabricks上に構築した話をします。具体的には、LangGraphを使ったスーパーバイザー型マルチエージェントの設計・実装から、MLflowでの管理、Databricksでの運用までを紹介します。
+
+私は半年前までAIエージェントを使ったことすらないレベルでしたが、Databricksを使うことでかなり簡単にいいものができました。同じ境遇の方の参考になれば幸いです。
+
+# エージェントの背景
+
+IVRyは電話のサービスの会社であり、社員自身も営業活動の中でIVRyサービスをドッグフーディング的に利用しています。そこから得られるデータや関連するビジネスコミュニケーションデータを活用すれば、セールスチームの業務を支援する社内エージェントが作れるのではないかと考え、実験を進めています。
+
+例えば、アポイントメント電話の終話直後に次回のミーティング資料が自動生成されている、といった体験を目指しています。現在はダミーデータを使いながらこの仕組みを検証している段階です。
+
+![AI Agentでセールス活動の効率化](/images/databricks-ai-agent-supervisor.md/ysdyt.png)
+*引用: [Databricks After Party 2025 LTスライド](https://ysdyt.dev/posts/2025/12/databricks-after-party-2025-LT)*
+
+あらゆるデータがDatabricksに集まっている環境を活かし、LangGraphベースのAIエージェントをDatabricks上に構築しました。エージェントに求められたのは、複数の異なるデータソースにアクセスしながら、ユーザーがボタン一つで資料のドラフトを作成できる機能です。
+
+1つのエージェントで全てを処理するのではなく、役割ごとにエージェントを分割し、それを統括するSupervisor Agentが全体を制御するアーキテクチャを採用しました。
+
+# エージェントの設計
+
+## Supervisor Agentにした理由
+
+マルチエージェントのアーキテクチャにはいくつかのパターンがあります。シーケンシャル（順番に処理）、ルーティング（入力に応じて振り分け）、そしてスーパーバイザー（管理Agentが全体を監督）などです。
+
+Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエストを受け取り、内容を解析した上で適切なサブAgentに処理を委譲するアーキテクチャです。各サブAgentは専門的な役割を持ち、必要なツールやデータにアクセスして結果を返します。Supervisor Agentはそれらの結果を統合し、最終的な回答をユーザーに返します。
+
+このパターンを採用した理由は以下です。
+
+1. **関心の分離**: 各サブAgentが専門領域に特化することで、プロンプトの複雑さを抑えられる
+2. **拡張性**: 新しい機能を追加する際、新しいサブAgentを追加するだけで対応可能
+3. **デバッグのしやすさ**: どのAgentでどのような処理が行われたかが明確になる
+
+## アーキテクチャの全体像
+
+実際に構築したマルチエージェントは以下のような構成です。
+
+![Supervisor Agentの構成](/images/databricks-ai-agent-supervisor.md/supervisor_agent.png)
+
+- **Supervisor Agent**: ユーザーからのリクエストを受け取り、適切なサブAgentにルーティングし、回答を統合してユーザーに返す
+- **従業員検索Agent**: 従業員名からデータ基盤上の従業員情報を検索・取得
+- **議事録取得Agent**: ミーティングの議事録データを取得・要約
+- **提案資料作成Agent**: 収集した情報をもとに提案資料のドラフトを生成
+
+データはUnity Catalogに格納されており、UDFsを通じてアクセスします。
+
+# 実装
+
+## UDFsの作成
+
+エージェントが自由にデータにアクセスすると予期せぬ挙動が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)を作成してアクセスを制限しました。これによりデータ取得の揺らぎを最小限にしています。
+
+以下のようにSQLを実行すればUnity Catalog上に関数を作ることができます。ただ、まだTerraformで管理できないので、今後のアップデートが待ち遠しいですね。
+
+```sql
+CREATE OR REPLACE FUNCTION dummy_catalog.dummy_schema.search_member(
+    member_name STRING COMMENT '検索する従業員名（部分一致）'
+)
+RETURNS TABLE(
+    email STRING COMMENT 'メールアドレス',
+    name STRING COMMENT '名前',
+    team_name STRING COMMENT 'チーム名'
+)
+COMMENT '名前で従業員を検索します。'
+RETURN
+    SELECT
+        email,
+        name,
+        team_name
+    FROM dummy_catalog.dummy_schema.members
+    WHERE name LIKE CONCAT('%', member_name, '%')
+    ORDER BY name
+    LIMIT 20
+```
+
+## エージェント定義の作成
+
+各サブAgentは、Pythonファイルとして定義します。以下は従業員検索Agentの例です。LangGraphの`create_react_agent`を使い、UDFsをツールとして渡すだけでAgentが作れます。ポイントは以下の4ステップです。
+
+1. `mlflow.models.ModelConfig()` でMLflow登録時に渡される設定値を取得
+2. `UCFunctionToolkit` でUDFsをAgentのツールとして利用可能にする
+3. `create_react_agent` でLLMとツールを組み合わせてReActパターンのAgentを作成
+4. `mlflow.models.set_model` でMLflowのモデルとして登録可能にする
+
+```python
+import mlflow
+from langchain_community.chat_models import ChatDatabricks
+from langchain_community.tools.databricks import UCFunctionToolkit
+from langgraph.prebuilt import create_react_agent
+
+# Step 1: MLflow登録時に渡される設定値を取得
+model_config = mlflow.models.ModelConfig()
+LLM_ENDPOINT = model_config.get("llm_endpoint")
+WAREHOUSE_ID = model_config.get("warehouse_id")
+
+UC_FUNCTIONS = [
+    "dummy_catalog.dummy_schema.search_member",
+]
+
+SYSTEM_PROMPT = """あなたは従業員検索エージェントです。
+入力された名前から従業員情報を検索し、以下のJSON形式で返してください。
+
+```json
+{
+    "name": "名前",
+    "email": "メールアドレス",
+    "team_name": "チーム名"
+}
+```
+
+見つからない場合はnullを返し、理由を記載してください。
+"""
+
+# Step 2: UDFsをAgentのツールとして利用可能にする
+
+toolkit = UCFunctionToolkit(warehouse_id=WAREHOUSE_ID, function_names=UC_FUNCTIONS)
+tools = toolkit.get_tools()
+
+# Step 3: LLMとツールを組み合わせてReActパターンのAgentを作成
+
+llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
+agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
+
+# Step 4: このAgentをMLflowのモデルとして登録可能にする
+
+mlflow.models.set_model(agent)
+
+```
+
+## MLflowでのサブAgent登録
+
+作成したエージェント定義ファイルを、**MLflow**を使ってUnity Catalogに登録します。これにより、バージョン管理やデプロイが容易になります。
+
+まず、共通設定とトレーシングの有効化です。トレーシングを有効にすると実行時のプロンプト情報などが記録され、後の評価に役立ちます。
+
+```python
+import mlflow
+from mlflow.models import infer_signature
+
+CATALOG = "dummy_catalog"
+SCHEMA = "dummy_schema"
+LLM_ENDPOINT = "databricks-meta-llama-3-3-70b-instruct"
+WAREHOUSE_ID = "xxxxxxxxxxxxxxxx"
+
+mlflow.langchain.autolog(log_traces=True)
+```
+
+次に、Agent定義ファイルをMLflowに記録し、Unity Catalogに登録する関数を定義します。ポイントは以下の3ステップです。
+
+1. `mlflow.langchain.log_model` でAgent定義ファイルをMLflowに記録
+2. `mlflow.register_model` でUnity Catalogに登録
+3. エイリアス（`latest`）を設定してサービングから参照できるようにする
+
+```python
+def register_agent(
+    catalog: str,
+    schema: str,
+    model_name: str,
+    definition_file: str,
+    llm_endpoint: str,
+    warehouse_id: str,
+    input_example: dict,
+    extra_config: dict | None = None,
+) -> dict:
+    """Agent定義ファイルをUnity Catalogに登録する。"""
+
+    model_config = {
+        "llm_endpoint": llm_endpoint,
+        "warehouse_id": warehouse_id,
+    }
+    if extra_config:
+        model_config.update(extra_config)
+
+    # Step 1: AgentをMLflowに記録
+    with mlflow.start_run(run_name=model_name):
+        model_info = mlflow.langchain.log_model(
+            lc_model=os.path.join(os.getcwd(), definition_file),
+            name="agent",
+            input_example=input_example,
+            model_config=model_config,
+        )
+
+    # Step 2: Unity Catalogに登録
+    registered_model_name = f"{catalog}.{schema}.{model_name}"
+    mlflow.set_registry_uri("databricks-uc")
+    registered_model = mlflow.register_model(
+        model_uri=model_info.model_uri,
+        name=registered_model_name,
+    )
+
+    # Step 3: エイリアスを設定
+    client = mlflow.tracking.MlflowClient()
+    client.set_registered_model_alias(
+        name=registered_model_name,
+        alias="latest",
+        version=registered_model.version,
+    )
+
+    return {
+        "model_uri": model_info.model_uri,
+        "registered_model_name": registered_model_name,
+        "version": registered_model.version,
+    }
+```
+
+あとはこの関数を呼び出すだけで、各サブAgentを登録できます。
+
+```python
+result = register_agent(
+    catalog=CATALOG,
+    schema=SCHEMA,
+    model_name="member_search_agent",
+    definition_file="member_search_agent_definition.py",
+    llm_endpoint=LLM_ENDPOINT,
+    warehouse_id=WAREHOUSE_ID,
+    input_example={
+        "messages": [{"role": "user", "content": "田中さんを検索してください"}]
+    },
+)
+print(f"Agent 登録完了! Version: {result['version']}")
+```
+
+## MLflowでのSupervisor Agent登録
+
+次にサブエージェントを呼び出すSupervisor Agentを登録します。定義ファイルは以下のようになります。
+
+Supervisor Agentのポイントは、サブAgentを`@tool`で定義してツールとして呼び出す点です。
+
+1. `load_agent_model` でUnity Catalogに登録済みのサブAgentをロード
+2. 各サブAgentを `@tool` で呼び出し可能なツールとして定義
+3. `create_react_agent` でSupervisor自身もReActパターンのAgentとして作成
+
+```python
+import mlflow
+from langchain_community.chat_models import ChatDatabricks
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+
+model_config = mlflow.models.ModelConfig()
+LLM_ENDPOINT = model_config.get("llm_endpoint")
+CATALOG = model_config.get("catalog")
+SCHEMA = model_config.get("schema")
+
+mlflow.set_registry_uri("databricks-uc")
+
+
+# Step 1: Unity Catalogから登録済みサブAgentをロード
+def load_agent_model(agent_name: str):
+    model_uri = f"models:/{CATALOG}.{SCHEMA}.{agent_name}@latest"
+    return mlflow.langchain.load_model(model_uri)
+
+
+# Step 2: 各サブAgentをツールとして定義
+@tool
+def call_member_search(member_name: str) -> str:
+    """従業員名から従業員情報を検索します。"""
+    agent = load_agent_model("member_search_agent")
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": f"{member_name}を検索してください"}]}
+    )
+    return result["messages"][-1].content
+
+
+@tool
+def call_meeting_notes(member_name: str) -> str:
+    """従業員に関連するミーティングの議事録を取得します。"""
+    agent = load_agent_model("meeting_notes_agent")
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": f"{member_name}の議事録を取得してください"}]}
+    )
+    return result["messages"][-1].content
+
+
+@tool
+def call_document_generator(context: str) -> str:
+    """収集した情報をもとに提案資料のドラフトを生成します。"""
+    agent = load_agent_model("document_generator_agent")
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": f"以下の情報から資料を作成してください:\n{context}"}]}
+    )
+    return result["messages"][-1].content
+
+
+SYSTEM_PROMPT = """あなたはSupervisor（司令塔）エージェントです。
+ユーザーの質問を解釈し、適切なサブエージェントを呼び出して回答を統合します。
+
+## 利用可能なツール
+1. call_member_search: 従業員名から従業員情報を検索
+2. call_meeting_notes: 従業員に関連する議事録を取得
+3. call_document_generator: 収集した情報から提案資料を生成
+
+## ワークフロー
+1. call_member_search で従業員を特定
+2. call_meeting_notes で関連する議事録を取得
+3. call_document_generator で資料のドラフトを生成
+"""
+
+# Step 3: Supervisor AgentをReActパターンで作成
+tools = [call_member_search, call_meeting_notes, call_document_generator]
+llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
+agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
+mlflow.models.set_model(agent)
+```
+
+サブAgentと同様に`register_agent`で登録します。`extra_config`でサブAgentのバージョンやカタログ情報を渡すことで、Supervisor Agentの定義ファイル内から`ModelConfig`経由で参照できるようにしています。
+
+```python
+result_supervisor = register_agent(
+    catalog=CATALOG,
+    schema=SCHEMA,
+    model_name="proposal_supervisor_agent",
+    definition_file="proposal_supervisor_agent_definition.py",
+    llm_endpoint=LLM_ENDPOINT,
+    warehouse_id=WAREHOUSE_ID,
+    input_example={
+        "messages": [{"role": "user", "content": "田中さんのミーティング資料を作成してください"}]
+    },
+    extra_config={
+        "catalog": CATALOG,
+        "schema": SCHEMA,
+        "member_search_version": result_member_search["version"],
+        "meeting_notes_version": result_meeting_notes["version"],
+        "document_generator_version": result_document_generator["version"],
+    },
+)
+print(f"Supervisor Agent 登録完了! Version: {result_supervisor['version']}")
+```
+
+## エージェントを使用する
+
+登録したエージェントは`mlflow.langchain.load_model`でロードするだけで実行できます。
+
+```python
+import mlflow
+
+mlflow.set_registry_uri("databricks-uc")
+
+# Unity Catalogからエージェントをロード
+model_uri = "models:/dummy_catalog.dummy_schema.proposal_supervisor_agent@latest"
+agent = mlflow.langchain.load_model(model_uri)
+
+# 実行
+result = agent.invoke({
+    "messages": [{"role": "user", "content": "田中さんのミーティング資料を作成してください"}]
+})
+print(result["messages"][-1].content)
+```
+
+実際に実行すると、Supervisorが質問内容を解析し、以下のような流れで処理されます。
+
+1. **Supervisor**が質問を解析し、必要なサブエージェントを判断
+2. **従業員検索Agent**が「田中さん」の従業員情報を特定
+3. **議事録取得Agent**が田中さんに関連するミーティングの議事録を取得
+4. **資料作成Agent**が収集した情報をもとに提案資料のドラフトを生成
+5. **Supervisor**が結果を統合してユーザーに回答
+
+# MLflowの便利な機能
+
+今回利用したMLflowについて、特に便利だった機能を紹介します。
+
+## MLflow Tracing
+
+`mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動的にトレーシングされます。Supervisorがどのサブエージェントを呼び出し、どのような結果が返ってきたかが可視化されるため、デバッグやモデルの改善に役立ちます。
+
+(後ほど図を入れる。)
+
+## Evaluation
+
+MLflowのEvaluation機能を使うことで、Agentの回答品質を定量的に評価できます。事前に用意した質問と期待する回答のペアに対して、実際のAgentの回答がどの程度一致するかを測定できます。
+
+(後ほど図を入れる。)
+
+## モデルのバージョン管理とデプロイ
+
+MLflowでモデルをバージョン管理できるため、プロンプトやモデルの変更ごとに結果を比較し、より良いバージョンに切り替えることが可能です。また、Databricks Asset Bundles（DAB）を使えば、Model Servingとして簡単にAPIとしてデプロイできます。外部からAPI経由で利用することも可能です。
+
+# Agent Bricksへの期待
+
+現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にエージェントを作成できるようになります。とても待ち遠しいです。
+<https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/>
+
+Databricksのエージェント関連の機能はアップデートが非常に活発で、新機能のリリースが続いています。今後の進化がとても楽しみです！
+
+# まとめ
+
+本記事では、Databricks上でLangGraphを使ったスーパーバイザー型マルチエージェントを構築した事例を紹介しました。
+
+- **スーパーバイザーパターン**を採用し、関心の分離・拡張性・デバッグのしやすさを実現
+- **LangGraph**でエージェント間のワークフローをグラフとして定義
+- **MLflow**でエージェントの登録・トレーシング・評価を管理
+- **Databricks Asset Bundles**でデプロイをコード管理
+
+Databricksのエコシステムを活用することで、開発からデプロイまでを一気通貫で行える環境が整っています。今までAIエージェントを作ったことがなく、社内で実験的に試してみたい方にはお勧めです。さらにDatabricks Appsと組み合わせればエージェントを使った社内アプリも簡単に構築できます。こういったトータルソリューションで展開できるところもDatabricksの魅力の一つです。
+
+---
+
+IVRyでは「イベントや最新ニュース、募集ポジションの情報を受け取りたい」「会社について詳しく話を聞いてみたい」といった方に向けて、キャリア登録やカジュアル面談の機会をご用意しています。ご興味をお持ちいただけた方は、ぜひ以下のページよりご登録・お申し込みください。
+
+<https://herp.careers/v1/ivry/wmZiOSAmZ4SQ>
+<https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21>
