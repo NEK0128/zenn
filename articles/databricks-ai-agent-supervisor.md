@@ -381,7 +381,8 @@ print(result["messages"][-1].content)
 
 MLflowの評価機能を使うことで、Agentの回答品質を定量的に評価できます。事前に用意した質問と期待する回答のペアに対して、実際のAgentの回答がどの程度一致するかを測定できます。
 
-(後ほど図を入れる。)
+![MLflow Evaluate](/images/databricks-ai-agent-supervisor.md/evaluate.avif)
+*引用: [MLflow 2.4のmlflow.evaluateとアーティファクトビューでLLMの評価が捗る件](https://qiita.com/taka_yayoi/items/f06adbf5510703b0510b)*
 
 ## モデルのバージョン管理とデプロイ
 
