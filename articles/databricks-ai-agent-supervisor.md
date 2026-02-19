@@ -375,7 +375,7 @@ print(result["messages"][-1].content)
 `mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動的にトレーシングされます。SupervisorがどのサブAgentを呼び出し、どのような結果が返ってきたかが可視化されるため、デバッグやモデルの改善に役立ちます。
 
 ![MLflow Tracing](/images/databricks-ai-agent-supervisor.md/mlflow_trace.avif)
-*引用: [MLflowトレーシングによるディープラーニングモデルのオブザーバビリティ](https://qiita.com/taka_yayoi/items/35c96ecd401c199e617b)*
+*引用: [DatabricksにおけるMLflow Tracing](https://qiita.com/taka_yayoi/items/35c96ecd401c199e617b)*
 
 ## 評価
 
