@@ -391,7 +391,7 @@ MLflowでモデルをバージョン管理できるため、プロンプトや�
 ![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.avif)
 *引用: [Workspace Model Registry の例](https://docs.databricks.com/aws/ja/mlflow/workspace-model-registry-example)*
 
-# 今後の展望 — Agent Bricksへの期待
+# Agent Bricksへの期待
 
 現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。とても待ち遠しいです。
 https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
