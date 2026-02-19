@@ -388,10 +388,13 @@ MLflowの評価機能を使うことで、Agentの回答品質を定量的に評
 
 MLflowでモデルをバージョン管理できるため、プロンプトやモデルの変更ごとに結果を比較し、より良いバージョンに切り替えることが可能です。また、Databricks Asset Bundles（DAB）を使えば、Model Servingとして簡単にAPIとしてデプロイできます。外部からAPI経由で利用することも可能です。
 
+![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.avif)
+*引用: [Workspace Model Registry の例](https://docs.databricks.com/aws/ja/mlflow/workspace-model-registry-example)*
+
 # Agent Bricksへの期待
 
 現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。とても待ち遠しいです。
-<https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/>
+https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
 DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いています。今後の進化がとても楽しみです！
 
