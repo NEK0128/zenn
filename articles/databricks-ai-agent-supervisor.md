@@ -14,7 +14,7 @@ publication_name: "ivry"
 
 そして、優勝するとビリヤード台の上でパフォーマンスをするという伝統があるのですが、日本人選手は靴を脱いで台に上がりました！日本人らしさを感じますね笑
 
-![優勝した瞬間（引用元: https://www.billiards-days.com/20260210-1/）](https://storage.googleapis.com/zenn-user-upload/@zenn/images/databricks-ai-agent-supervisor.md/billiards.jpg)
+![優勝した瞬間（引用元: https://www.billiards-days.com/20260210-1/）](/images/databricks-ai-agent-supervisor.md/billiards.jpg)
 
 さて、本日のビリヤードの話はこのへんで切り上げて本題に入ります！
 
