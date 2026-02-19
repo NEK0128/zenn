@@ -24,7 +24,7 @@ publication_name: "ivry"
 
 私は半年前までAI Agentを使ったことすらないレベルでしたが、Databricksを使うことでかなり簡単にいいものができました。同じ境遇の方の参考になれば幸いです。
 
-# Agentの背景
+# なぜAgentを作ったのか
 
 IVRyは電話のサービスの会社であり、社員自身も営業活動の中でIVRyサービスをドッグフーディング的に利用しています。そこから得られるデータや関連するビジネスコミュニケーションデータを活用すれば、セールスチームの業務を支援する社内Agentが作れるのではないかと考え、実験を進めています。
 
@@ -119,15 +119,7 @@ UC_FUNCTIONS = [
 
 SYSTEM_PROMPT = """あなたは従業員検索エージェントです。
 入力された名前から従業員情報を検索し、以下のJSON形式で返してください。
-
-```json
-{
-    "name": "名前",
-    "email": "メールアドレス",
-    "team_name": "チーム名"
-}
-```
-
+{"name": "名前", "email": "メールアドレス", "team_name": "チーム名"}
 見つからない場合はnullを返し、理由を記載してください。
 """
 
@@ -304,12 +296,12 @@ def call_document_generator(context: str) -> str:
 SYSTEM_PROMPT = """あなたはSupervisor（司令塔）エージェントです。
 ユーザーの質問を解釈し、適切なサブエージェントを呼び出して回答を統合します。
 
-## 利用可能なツール
+[利用可能なツール]
 1. call_member_search: 従業員名から従業員情報を検索
 2. call_meeting_notes: 従業員に関連する議事録を取得
 3. call_document_generator: 収集した情報から提案資料を生成
 
-## ワークフロー
+[ワークフロー]
 1. call_member_search で従業員を特定
 2. call_meeting_notes で関連する議事録を取得
 3. call_document_generator で資料のドラフトを生成
