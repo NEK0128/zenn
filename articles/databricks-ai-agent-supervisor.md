@@ -408,5 +408,5 @@ Databricksのエコシステムを活用することで、開発からデプロ�
 
 IVRyでは「イベントや最新ニュース、募集ポジションの情報を受け取りたい」「会社について詳しく話を聞いてみたい」といった方に向けて、キャリア登録やカジュアル面談の機会をご用意しています。ご興味をお持ちいただけた方は、ぜひ以下のページよりご登録・お申し込みください。
 
-<https://herp.careers/v1/ivry/wmZiOSAmZ4SQ>
-<https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21>
+https://herp.careers/v1/ivry/wmZiOSAmZ4SQ
+https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21
