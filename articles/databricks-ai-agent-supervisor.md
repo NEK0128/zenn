@@ -393,7 +393,7 @@ https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
 # まとめ
 
-Databricks上でSupervisor型Multi-Agentを構築した事例を紹介しました。
+業務効率化のためにDatabricks上でLangGraphベースのSupervisor Agentを構築し、設計からMLflowでの登録・評価までを紹介しました。
 
 Databricksを使えば、Agent定義からMLflowでの登録・評価・デプロイまで一気通貫で行えます。Databricks Appsと組み合わせれば社内アプリも簡単に構築でき、こうしたトータルソリューションがDatabricksの魅力です。
 
