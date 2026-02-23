@@ -388,7 +388,7 @@ MLflowでモデルをバージョン管理でき、Databricks Asset Bundles（DA
 
 # Agent Bricksへの期待
 
-Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されています。日本リージョンへの展開が待ち遠しいです。
+Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。日本リージョンへの展開が待ち遠しいです。
 https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
 # まとめ
