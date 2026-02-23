@@ -259,23 +259,23 @@ def load_agent_model(agent_name: str):
     return mlflow.langchain.load_model(model_uri)
 
 
-# Step 2: 各サブAgentをツールとして定義
+# Step 2: 各Sub Agentをツールとして定義
 @tool
-def call_member_search(member_name: str) -> str:
-    """従業員名から従業員情報を検索します。"""
-    agent = load_agent_model("member_search_agent")
+def call_company_search(company_name: str) -> str:
+    """企業名から企業情報を検索します。"""
+    agent = load_agent_model("company_search_agent")
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": f"{member_name}を検索してください"}]}
+        {"messages": [{"role": "user", "content": f"{company_name}を検索してください"}]}
     )
     return result["messages"][-1].content
 
 
 @tool
-def call_meeting_notes(member_name: str) -> str:
-    """従業員に関連するミーティングの議事録を取得します。"""
+def call_meeting_notes(company_name: str) -> str:
+    """企業に関連するミーティングの議事録を取得します。"""
     agent = load_agent_model("meeting_notes_agent")
     result = agent.invoke(
-        {"messages": [{"role": "user", "content": f"{member_name}の議事録を取得してください"}]}
+        {"messages": [{"role": "user", "content": f"{company_name}の議事録を取得してください"}]}
     )
     return result["messages"][-1].content
 
@@ -291,21 +291,21 @@ def call_document_generator(context: str) -> str:
 
 
 SYSTEM_PROMPT = """あなたはSupervisor（司令塔）エージェントです。
-ユーザーの質問を解釈し、適切なサブエージェントを呼び出して回答を統合します。
+ユーザーの質問を解釈し、適切なSub Agentを呼び出して回答を統合します。
 
 [利用可能なツール]
-1. call_member_search: 従業員名から従業員情報を検索
-2. call_meeting_notes: 従業員に関連する議事録を取得
+1. call_company_search: 企業名から企業情報を検索
+2. call_meeting_notes: 企業に関連する議事録を取得
 3. call_document_generator: 収集した情報から提案資料を生成
 
 [ワークフロー]
-1. call_member_search で従業員を特定
+1. call_company_search で企業情報を取得
 2. call_meeting_notes で関連する議事録を取得
 3. call_document_generator で資料のドラフトを生成
 """
 
 # Step 3: Supervisor AgentをReActパターンで作成
-tools = [call_member_search, call_meeting_notes, call_document_generator]
+tools = [call_company_search, call_meeting_notes, call_document_generator]
 llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1)
 agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
 mlflow.models.set_model(agent)
@@ -322,12 +322,12 @@ result_supervisor = register_agent(
     llm_endpoint=LLM_ENDPOINT,
     warehouse_id=WAREHOUSE_ID,
     input_example={
-        "messages": [{"role": "user", "content": "田中さんのミーティング資料を作成してください"}]
+        "messages": [{"role": "user", "content": "〇〇株式会社の提案資料を作成してください"}]
     },
     extra_config={
         "catalog": CATALOG,
         "schema": SCHEMA,
-        "member_search_version": result_member_search["version"],
+        "company_search_version": result_company_search["version"],
         "meeting_notes_version": result_meeting_notes["version"],
         "document_generator_version": result_document_generator["version"],
     },
@@ -350,16 +350,16 @@ agent = mlflow.langchain.load_model(model_uri)
 
 # 実行
 result = agent.invoke({
-    "messages": [{"role": "user", "content": "田中さんのミーティング資料を作成してください"}]
+    "messages": [{"role": "user", "content": "〇〇株式会社の提案資料を作成してください"}]
 })
 print(result["messages"][-1].content)
 ```
 
 実際に実行すると、Supervisorが質問内容を解析し、以下のような流れで処理されます。
 
-1. **Supervisor**が質問を解析し、必要なサブAgentを判断
-2. **従業員検索Agent**が「田中さん」の従業員情報を特定
-3. **議事録取得Agent**が田中さんに関連するミーティングの議事録を取得
+1. **Supervisor**が質問を解析し、必要なSub Agentを判断
+2. **企業情報取得Agent**が「〇〇株式会社」の企業情報を取得
+3. **議事録取得Agent**が〇〇株式会社に関連するミーティングの議事録を取得
 4. **資料作成Agent**が収集した情報をもとに提案資料のドラフトを生成
 5. **Supervisor**が結果を統合してユーザーに回答
 
