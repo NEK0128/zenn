@@ -10,7 +10,7 @@ publication_name: "ivry"
 
 こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
 
-今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことで、お会いしたことのあるプロの方だったので感動しました！
+今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことでとても感動しました！
 
 そして、優勝するとビリヤード台の上でパフォーマンスをするという慣例があるのですが、その優勝した日本人プロの方は靴を脱いで台に上がり、日本人らしさを感じました笑
 
@@ -99,7 +99,7 @@ RETURN
 
 1. **`ModelConfig()`** — MLflow登録時の設定値を取得
 2. **`UCFunctionToolkit`** — UDFsをAgentのツールとして利用可能にする。データアクセスをUDFs経由に制限できる
-3. **`create_react_agent`** — LLMとツールでReActパターンのAgentを作成。「思考→実行→判断」を繰り返す仕組みを数行で構築できる
+3. **`create_react_agent`** — LLMとツールでReActパターンのAgentを作成
 4. **`set_model`** — MLflowのモデルとして登録可能にする
 
 ```python
@@ -369,21 +369,21 @@ print(result["messages"][-1].content)
 
 `mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動トレーシングされます。どのSub Agentがどんな結果を返したか可視化され、デバッグに役立ちます。
 
-![MLflow Tracing](/images/databricks-ai-agent-supervisor.md/mlflow_trace.avif)
+![MLflow Tracing](/images/databricks-ai-agent-supervisor.md/mlflow_trace.png)
 *引用: [DatabricksにおけるMLflow Tracing](https://qiita.com/taka_yayoi/items/35c96ecd401c199e617b)*
 
 ## 評価
 
 MLflowの評価機能で、Agentの回答品質を定量的に測定できます。質問と期待する回答のペアを用意し、実際の回答との一致度を確認します。
 
-![MLflow Evaluate](/images/databricks-ai-agent-supervisor.md/evaluate.avif)
+![MLflow Evaluate](/images/databricks-ai-agent-supervisor.md/evaluate.png)
 *引用: [MLflow 2.4のmlflow.evaluateとアーティファクトビューでLLMの評価が捗る件](https://qiita.com/taka_yayoi/items/f06adbf5510703b0510b)*
 
 ## モデルのバージョン管理とデプロイ
 
 MLflowでモデルをバージョン管理し、変更ごとに結果を比較できます。Databricks Asset Bundles（DAB）を使えばModel Servingとして簡単にAPIデプロイも可能です。
 
-![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.avif)
+![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.png)
 *引用: [Workspace Model Registry の例](https://docs.databricks.com/aws/ja/mlflow/workspace-model-registry-example)*
 
 # Agent Bricksへの期待
