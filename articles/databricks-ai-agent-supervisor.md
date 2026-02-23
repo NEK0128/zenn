@@ -381,7 +381,7 @@ MLflowの評価機能で、モデルごとの出力を並べて比較できま�
 
 ## モデルのバージョン管理とデプロイ
 
-MLflowでモデルをバージョン管理し、変更ごとに結果を比較できます。Databricks Asset Bundles（DAB）を使えばModel Servingとして簡単にAPIデプロイも可能です。
+MLflowでモデルをバージョン管理でき、Databricks Asset Bundles（DAB）を使えばModel Servingとして簡単にAPIデプロイできます。
 
 ![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.png)
 *引用: [Workspace Model Registry の例](https://docs.databricks.com/aws/ja/mlflow/workspace-model-registry-example)*
