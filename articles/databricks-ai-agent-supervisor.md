@@ -45,7 +45,7 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 このパターンを採用した理由は以下です。
 
-1. **関心の分離**: 各サブAgentが専門領域に特化することで、プロンプトの複雑さを抑えられる
+1. **関心の分離**: 各Sub Agentが専門領域に特化することで、プロンプトの複雑さを抑えられる
 2. **拡張性**: 新しい機能を追加する際、新しいSub Agentを追加するだけで対応可能
 3. **デバッグのしやすさ**: どのAgentでどのような処理が行われたかが明確になる
 
@@ -55,7 +55,7 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 ![Supervisor Agentの構成](/images/databricks-ai-agent-supervisor.md/supervisor_agent.png)
 
-- **Supervisor Agent**: ユーザーからのリクエストを受け取り、適切なサブAgentにルーティングし、回答を統合してユーザーに返す
+- **Supervisor Agent**: ユーザーからのリクエストを受け取り、適切なSub Agentにルーティングし、回答を統合してユーザーに返す
 - **情報取得Agent**: データ基盤上の企業の基本情報を検索・取得
 - **議事録取得Agent**: ミーティングの議事録データを取得・要約
 - **提案資料作成Agent**: 収集した情報をもとに提案資料のドラフトを生成
@@ -214,7 +214,7 @@ def register_agent(
     }
 ```
 
-あとはこの関数を呼び出すだけで、各サブAgentを登録できます。
+あとはこの関数を呼び出すだけで、各Sub Agentを登録できます。
 
 ```python
 result = register_agent(
@@ -253,7 +253,7 @@ SCHEMA = model_config.get("schema")
 mlflow.set_registry_uri("databricks-uc")
 
 
-# Step 1: Unity Catalogから登録済みサブAgentをロード
+# Step 1: Unity Catalogから登録済みSub Agentをロード
 def load_agent_model(agent_name: str):
     model_uri = f"models:/{CATALOG}.{SCHEMA}.{agent_name}@latest"
     return mlflow.langchain.load_model(model_uri)
@@ -311,7 +311,7 @@ agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
 mlflow.models.set_model(agent)
 ```
 
-サブAgentと同様に`register_agent`で登録します。`extra_config`でサブAgentのバージョンやカタログ情報を渡すことで、Supervisor Agentの定義ファイル内から`ModelConfig`経由で参照できるようにしています。
+Sub Agentと同様に`register_agent`で登録します。`extra_config`でSub Agentのバージョンやカタログ情報を渡すことで、Supervisor Agentの定義ファイル内から`ModelConfig`経由で参照できるようにしています。
 
 ```python
 result_supervisor = register_agent(
@@ -369,7 +369,7 @@ print(result["messages"][-1].content)
 
 ## MLflow Tracing
 
-`mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動的にトレーシングされます。SupervisorがどのサブAgentを呼び出し、どのような結果が返ってきたかが可視化されるため、デバッグやモデルの改善に役立ちます。
+`mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動的にトレーシングされます。SupervisorがどのSub Agentを呼び出し、どのような結果が返ってきたかが可視化されるため、デバッグやモデルの改善に役立ちます。
 
 ![MLflow Tracing](/images/databricks-ai-agent-supervisor.md/mlflow_trace.avif)
 *引用: [DatabricksにおけるMLflow Tracing](https://qiita.com/taka_yayoi/items/35c96ecd401c199e617b)*
@@ -390,19 +390,14 @@ MLflowでモデルをバージョン管理できるため、プロンプトや�
 
 # Agent Bricksへの期待
 
-現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。とても待ち遠しいです。
+現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになり、とても待ち遠しいです。
 https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
-DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いています。今後の進化がとても楽しみです！
+DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いており、毎回りリースを楽しみにしています！
 
 # まとめ
 
-本記事では、Databricks上でLangGraphを使ったSupervisor型Multi-Agentを構築した事例を紹介しました。
-
-- **Supervisorパターン**を採用し、関心の分離・拡張性・デバッグのしやすさを実現
-- **LangGraph**でAgent間のワークフローをグラフとして定義
-- **MLflow**でAgentの登録・トレーシング・評価を管理
-- **Databricks Asset Bundles**でデプロイをコード管理
+本記事では、Databricks上でSupervisor Agentを構築した事例を紹介しました。
 
 Databricksのエコシステムを活用することで、開発からデプロイまでを一気通貫で行える環境が整っています。今までAI Agentを作ったことがなく、社内で実験的に試してみたい方にはお勧めです。さらにDatabricks Appsと組み合わせればAgentを使った社内アプリも簡単に構築できます。こういったトータルソリューションで展開できるところもDatabricksの魅力の一つです。
 
