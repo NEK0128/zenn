@@ -1,5 +1,5 @@
 ---
-title: "DatabricksでSupervisor型マルチAgentを構築した話"
+title: "DatabricksでSupervisor Agentを構築してみた"
 emoji: "🤖"
 type: "tech"
 topics: ["Databricks", "LangGraph", "AIAgent", "MLflow", "Python"]
@@ -10,17 +10,17 @@ publication_name: "ivry"
 
 こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
 
-今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことで感動しました！
+今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことで、実際にお会いしているプロの方だったので感動しました！
 
-そして、優勝するとビリヤード台の上でパフォーマンスをするという伝統があるのですが、日本人選手は靴を脱いで台に上がりました！日本人らしさを感じますね笑
+そして、優勝するとビリヤード台の上でパフォーマンスをするという慣例があるのですが、その優勝した日本人プロの方は靴を脱いで台に上がり、日本人らしさを感じました笑
 
-![優勝した瞬間（引用元: https://www.billiards-days.com/20260210-1/）](/images/databricks-ai-agent-supervisor.md/billiards.jpg)
+![優勝のポスター（引用元: https://www.billiards-days.com/20260210-1/）](/images/databricks-ai-agent-supervisor.md/billiards.jpg)
 
 さて、本日のビリヤードの話はこのへんで切り上げて本題に入ります！
 
 # はじめに
 
-今回は、社内の業務効率化のためにAI Agentの仕組みをDatabricks上に構築した話をします。具体的には、LangGraphを使ったSupervisor型マルチAgentの設計・実装から、MLflowでの管理、Databricksでの運用までを紹介します。
+今回は、社内の業務効率化のためにAI Agentの仕組みをDatabricks上に構築した話をします。具体的には、LangGraphを使ったSupervisor Agentの設計から、Databricks上でのAgent作成、MLflowを利用した評価までを紹介します。
 
 私は半年前までAI Agentを使ったことすらないレベルでしたが、Databricksを使うことでかなり簡単にいいものができました。同じ境遇の方の参考になれば幸いです。
 
@@ -394,7 +394,7 @@ MLflowでモデルをバージョン管理できるため、プロンプトや�
 # Agent Bricksへの期待
 
 現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。とても待ち遠しいです。
-https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
+<https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/>
 
 DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いています。今後の進化がとても楽しみです！
 
@@ -413,5 +413,5 @@ Databricksのエコシステムを活用することで、開発からデプロ�
 
 IVRyでは「イベントや最新ニュース、募集ポジションの情報を受け取りたい」「会社について詳しく話を聞いてみたい」といった方に向けて、キャリア登録やカジュアル面談の機会をご用意しています。ご興味をお持ちいただけた方は、ぜひ以下のページよりご登録・お申し込みください。
 
-https://herp.careers/v1/ivry/wmZiOSAmZ4SQ
-https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21
+<https://herp.careers/v1/ivry/wmZiOSAmZ4SQ>
+<https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21>
