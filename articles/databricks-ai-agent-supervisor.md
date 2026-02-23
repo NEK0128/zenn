@@ -97,7 +97,7 @@ RETURN
 
 各Sub Agentは、Pythonファイルとして定義します。以下は企業情報取得Agentの例です。LangGraphの`create_react_agent`を使い、UDFsをツールとして渡すだけでAgentが作れます。ポイントは以下の4ステップです。
 
-1. **`mlflow.models.ModelConfig()`** — MLflow登録時に渡される設定値（LLMエンドポイントやWarehouse ID）を取得する。設定をコードにハードコードせず外部から注入できるため、環境ごとの切り替えが容易になる
+1. **`mlflow.models.ModelConfig()`** — MLflow登録時に渡される設定値を取得する
 2. **`UCFunctionToolkit`** — Unity Catalogに登録したUDFsをAgentのツールとして利用可能にする。Agentがデータにアクセスする手段をUDFs経由に制限できる
 3. **`create_react_agent`** — LLMとツールを組み合わせてReActパターンのAgentを作成する。LLMが「考えて→ツールを実行→結果を見て判断」を繰り返す仕組みを数行で構築できる
 4. **`mlflow.models.set_model`** — このAgentをMLflowのモデルとして登録可能にする。これにより`log_model`でMLflowに記録できるようになる
@@ -237,9 +237,9 @@ print(f"Agent 登録完了! Version: {result['version']}")
 
 Supervisor Agentのポイントは、サブAgentを`@tool`で定義してツールとして呼び出す点です。
 
-1. `load_agent_model` でUnity Catalogに登録済みのサブAgentをロード
-2. 各サブAgentを `@tool` で呼び出し可能なツールとして定義
-3. `create_react_agent` でSupervisor自身もReActパターンのAgentとして作成
+1. **`load_agent_model`** — Unity Catalogに登録済みのサブAgentをロードする関数を定義する。エイリアス（`@latest`）で参照するため、サブAgentが更新されてもSupervisor側のコード変更は不要
+2. **`@tool`デコレータ** — 各サブAgentの呼び出しをLangChainのツールとして定義する。これによりSupervisorのLLMがどのサブAgentを呼ぶか自律的に判断できるようになる
+3. **`create_react_agent`** — Supervisor自身もReActパターンのAgentとして作成する。サブAgentと同じ仕組みで構築できるため、アーキテクチャが統一される
 
 ```python
 import mlflow
