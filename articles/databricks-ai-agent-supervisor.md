@@ -233,13 +233,11 @@ print(f"Agent 登録完了! Version: {result['version']}")
 
 ## MLflowでのSupervisor Agent登録
 
-次にサブAgentを呼び出すSupervisor Agentを登録します。定義ファイルは以下のようになります。
+次にSub Agentを呼び出すSupervisor Agentを登録します。定義ファイルは以下のようになります。Supervisor Agentのポイントは、Sub Agentを`@tool`で定義してツールとして呼び出す点です。
 
-Supervisor Agentのポイントは、サブAgentを`@tool`で定義してツールとして呼び出す点です。
-
-1. **`load_agent_model`** — Unity Catalogに登録済みのサブAgentをロードする関数を定義する。エイリアス（`@latest`）で参照するため、サブAgentが更新されてもSupervisor側のコード変更は不要
-2. **`@tool`デコレータ** — 各サブAgentの呼び出しをLangChainのツールとして定義する。これによりSupervisorのLLMがどのサブAgentを呼ぶか自律的に判断できるようになる
-3. **`create_react_agent`** — Supervisor自身もReActパターンのAgentとして作成する。サブAgentと同じ仕組みで構築できるため、アーキテクチャが統一される
+1. **`load_agent_model`** — Unity Catalogに登録済みのSub Agentをロードする関数を定義する。エイリアス（`@latest`）で参照するため、Sub Agentが更新されてもSupervisor側のコード変更は不要
+2. **`@tool`デコレータ** — 各Sub Agentの呼び出しをLangChainのツールとして定義する。これによりSupervisorのLLMがどのSub Agentを呼ぶか自律的に判断できるようになる
+3. **`create_react_agent`** — Supervisor自身もReActパターンのAgentとして作成する。Sub Agentと同じ仕組みで構築できるため、アーキテクチャが統一される
 
 ```python
 import mlflow
@@ -393,7 +391,7 @@ MLflowでモデルをバージョン管理できるため、プロンプトや�
 # Agent Bricksへの期待
 
 現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。とても待ち遠しいです。
-<https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/>
+https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
 DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いています。今後の進化がとても楽しみです！
 
@@ -412,5 +410,5 @@ Databricksのエコシステムを活用することで、開発からデプロ�
 
 IVRyでは「イベントや最新ニュース、募集ポジションの情報を受け取りたい」「会社について詳しく話を聞いてみたい」といった方に向けて、キャリア登録やカジュアル面談の機会をご用意しています。ご興味をお持ちいただけた方は、ぜひ以下のページよりご登録・お申し込みください。
 
-<https://herp.careers/v1/ivry/wmZiOSAmZ4SQ>
-<https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21>
+https://herp.careers/v1/ivry/wmZiOSAmZ4SQ
+https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21
