@@ -235,7 +235,7 @@ print(f"Agent 登録完了! Version: {result['version']}")
 
 次にSub Agentを呼び出すSupervisor Agentを登録します。定義ファイルは以下のようになります。Supervisor Agentのポイントは、Sub Agentを`@tool`で定義してツールとして呼び出す点です。
 
-1. **`load_agent_model`** — Unity Catalogに登録済みのSub Agentをロードする関数を定義する。エイリアス（`@latest`）で参照するため、Sub Agentが更新されてもSupervisor側のコード変更は不要
+1. **`load_agent_model`** — Unity Catalogに登録済みのSub Agentをロードする関数を定義する。エイリアスで参照するため、Sub Agentが更新されてもSupervisor側のコード変更は不要
 2. **`@tool`デコレータ** — 各Sub Agentの呼び出しをLangChainのツールとして定義する。これによりSupervisorのLLMがどのSub Agentを呼ぶか自律的に判断できるようになる
 3. **`create_react_agent`** — Supervisor自身もReActパターンのAgentとして作成する。Sub Agentと同じ仕組みで構築できるため、アーキテクチャが統一される
 
@@ -358,7 +358,7 @@ print(result["messages"][-1].content)
 実際に実行すると、Supervisorが質問内容を解析し、以下のような流れで処理されます。
 
 1. **Supervisor**が質問を解析し、必要なSub Agentを判断
-2. **企業情報取得Agent**が「〇〇株式会社」の企業情報を取得
+2. **企業情報取得Agent**が「〇〇株式会社」の企業情報を検索
 3. **議事録取得Agent**が〇〇株式会社に関連するミーティングの議事録を取得
 4. **資料作成Agent**が収集した情報をもとに提案資料のドラフトを生成
 5. **Supervisor**が結果を統合してユーザーに回答
