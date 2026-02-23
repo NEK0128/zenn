@@ -97,10 +97,10 @@ RETURN
 
 各Sub Agentは、Pythonファイルとして定義します。以下は企業情報取得Agentの例です。LangGraphの`create_react_agent`を使い、UDFsをツールとして渡すだけでAgentが作れます。ポイントは以下の4ステップです。
 
-1. `mlflow.models.ModelConfig()` でMLflow登録時に渡される設定値を取得
-2. `UCFunctionToolkit` でUDFsをAgentのツールとして利用可能にする
-3. `create_react_agent` でLLMとツールを組み合わせてReActパターンのAgentを作成
-4. `mlflow.models.set_model` でMLflowのモデルとして登録可能にする
+1. **`mlflow.models.ModelConfig()`** — MLflow登録時に渡される設定値（LLMエンドポイントやWarehouse ID）を取得する。設定をコードにハードコードせず外部から注入できるため、環境ごとの切り替えが容易になる
+2. **`UCFunctionToolkit`** — Unity Catalogに登録したUDFsをAgentのツールとして利用可能にする。Agentがデータにアクセスする手段をUDFs経由に制限できる
+3. **`create_react_agent`** — LLMとツールを組み合わせてReActパターンのAgentを作成する。LLMが「考えて→ツールを実行→結果を見て判断」を繰り返す仕組みを数行で構築できる
+4. **`mlflow.models.set_model`** — このAgentをMLflowのモデルとして登録可能にする。これにより`log_model`でMLflowに記録できるようになる
 
 ```python
 import mlflow
@@ -160,7 +160,7 @@ mlflow.langchain.autolog(log_traces=True)
 
 1. **`mlflow.langchain.log_model`** — AgentのPythonファイルをMLflowのExperimentにアーティファクトとして記録する。この時点ではまだ外部から参照できない「下書き」のような状態
 2. **`mlflow.register_model`** — 記録したモデルをUnity Catalogに正式に登録する。これにより `models:/catalog.schema.model_name` というURIで他のコードから参照可能になる
-3. **エイリアスの設定** — 登録したモデルに `latest` などの別名を付ける。バージョン番号（1, 2, 3...）の代わりに `models:/catalog.schema.model_name@latest` のように名前で参照できるため、モデル更新時に呼び出し側のコード変更が不要になる
+3. **エイリアスの設定** — 登録したモデルに `latest` などの別名を付ける。バージョン番号の代わりに `models:/catalog.schema.model_name@latest` のように名前で参照できるため、モデル更新時に呼び出し側のコード変更が不要になる
 
 ```python
 def register_agent(
