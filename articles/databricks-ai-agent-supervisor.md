@@ -22,18 +22,18 @@ publication_name: "ivry"
 
 今回は、社内の業務効率化のためにAI Agentの仕組みをDatabricks上に構築した話をします。具体的には、LangGraphを使ったSupervisor Agentの設計から、Databricks上でのAgent作成、MLflowを利用した評価までを紹介します。
 
-私は半年前までAI Agentを使ったことすらないレベルでしたが、Databricksを使うことでかなり簡単にいいものができました。同じ境遇の方の参考になれば幸いです。
+私は半年前までAI Agentを使ったことすらないレベルでしたが、Databricksを使うことでかなり簡単にいいものができました。ぜひまだAgentを作成したことがない同じ境遇の方の参考になれば幸いです。
 
 # なぜAgentを作ったのか
 
-IVRyは電話のサービスの会社であり、社員自身も営業活動の中でIVRyサービスをドッグフーディング的に利用しています。そこから得られるデータや関連するビジネスコミュニケーションデータを活用すれば、セールスチームの業務を支援する社内Agentが作れるのではないかと考え、実験を進めています。
+IVRyはAIによる電話自動応答サービスを提供している会社であり、社内でも営業活動の中でアイブリーを利用しています。そこから得られるデータやビジネスコミュニケーションデータを活用すれば、セールスチームの業務を支援する社内向けサービスが作れるのではないかと考え、実験を進めています。
 
-例えば、アポイントメント電話の終話直後に次回のミーティング資料が自動生成されている、といった体験を目指しています。現在はダミーデータを使いながらこの仕組みを検証している段階です。
+例えば、アポイントメント電話の終話直後に次回のミーティング資料が自動生成されている、といった体験を目指しています。現在はダミーデータを使いながら検証しています。
 
 ![AI Agentでセールス活動の効率化](/images/databricks-ai-agent-supervisor.md/ysdyt.png)
 *引用: [Databricks After Party 2025 LTスライド](https://ysdyt.dev/posts/2025/12/databricks-after-party-2025-LT)*
 
-あらゆるデータがDatabricksに集まっている環境を活かし、LangGraphベースのAI AgentをDatabricks上に構築しました。Agentに求められたのは、複数の異なるデータソースにアクセスしながら、ユーザーがボタン一つで資料のドラフトを作成できる機能です。
+弊社ではあらゆるデータがDatabricksに集まっているため、その環境を活かしてDatabricksと親和性が高いLangGraphベースのAI Agentを構築しました。実験的に作成したのが、Agentが複数の異なるデータソースにアクセスしながら、ユーザーがボタン一つで資料のドラフトを作成できるサービスです。
 
 1つのAgentで全てを処理するのではなく、役割ごとにAgentを分割し、それを統括するSupervisor Agentが全体を制御するアーキテクチャを採用しました。
 
@@ -41,14 +41,12 @@ IVRyは電話のサービスの会社であり、社員自身も営業活動の�
 
 ## Supervisor Agentにした理由
 
-マルチAgentのアーキテクチャにはいくつかのパターンがあります。シーケンシャル（順番に処理）、ルーティング（入力に応じて振り分け）、そしてSupervisor（管理Agentが全体を監督）などです。
-
-Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエストを受け取り、内容を解析した上で適切なサブAgentに処理を委譲するアーキテクチャです。各サブAgentは専門的な役割を持ち、必要なツールやデータにアクセスして結果を返します。Supervisor Agentはそれらの結果を統合し、最終的な回答をユーザーに返します。
+Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエストを受け取り、内容を解析した上で適切なSub Agentに処理を委譲するアーキテクチャです。各Sub Agentは専門的な役割を持ち、必要なツールやデータにアクセスして結果を返します。Supervisor Agentはそれらの結果を統合し、最終的な回答をユーザーに返します。
 
 このパターンを採用した理由は以下です。
 
 1. **関心の分離**: 各サブAgentが専門領域に特化することで、プロンプトの複雑さを抑えられる
-2. **拡張性**: 新しい機能を追加する際、新しいサブAgentを追加するだけで対応可能
+2. **拡張性**: 新しい機能を追加する際、新しいSub Agentを追加するだけで対応可能
 3. **デバッグのしやすさ**: どのAgentでどのような処理が行われたかが明確になる
 
 ## アーキテクチャの全体像
@@ -58,7 +56,7 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 ![Supervisor Agentの構成](/images/databricks-ai-agent-supervisor.md/supervisor_agent.png)
 
 - **Supervisor Agent**: ユーザーからのリクエストを受け取り、適切なサブAgentにルーティングし、回答を統合してユーザーに返す
-- **従業員検索Agent**: 従業員名からデータ基盤上の従業員情報を検索・取得
+- **情報取得Agent**: データ基盤上の企業の基本情報を検索・取得
 - **議事録取得Agent**: ミーティングの議事録データを取得・要約
 - **提案資料作成Agent**: 収集した情報をもとに提案資料のドラフトを生成
 
@@ -68,27 +66,29 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 ## UDFsの作成
 
-Agentが自由にデータにアクセスすると予期せぬ挙動が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)を作成してアクセスを制限しました。これによりデータ取得の揺らぎを最小限にしています。
+Agentが自由にデータにアクセスすると予期せぬ挙動が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)を作成して制限しました。これによりデータ取得の揺らぎを最小限にしています。
 
 以下のようにSQLを実行すればUnity Catalog上に関数を作ることができます。ただ、まだTerraformで管理できないので、今後のアップデートが待ち遠しいですね。
 
 ```sql
-CREATE OR REPLACE FUNCTION dummy_catalog.dummy_schema.search_member(
-    member_name STRING COMMENT '検索する従業員名（部分一致）'
+CREATE OR REPLACE FUNCTION dummy_catalog.dummy_schema.search_company(
+    company_name STRING COMMENT '検索する企業名（部分一致）'
 )
 RETURNS TABLE(
-    email STRING COMMENT 'メールアドレス',
-    name STRING COMMENT '名前',
-    team_name STRING COMMENT 'チーム名'
+    account_id STRING COMMENT 'アカウントID',
+    name STRING COMMENT '企業名',
+    industry STRING COMMENT '業種',
+    location STRING COMMENT '所在地'
 )
-COMMENT '名前で従業員を検索します。'
+COMMENT '企業名で企業情報を検索します。'
 RETURN
     SELECT
-        email,
+        account_id,
         name,
-        team_name
-    FROM dummy_catalog.dummy_schema.members
-    WHERE name LIKE CONCAT('%', member_name, '%')
+        industry,
+        location
+    FROM dummy_catalog.dummy_schema.companies
+    WHERE name LIKE CONCAT('%', company_name, '%')
     ORDER BY name
     LIMIT 20
 ```
