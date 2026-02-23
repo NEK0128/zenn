@@ -10,7 +10,7 @@ publication_name: "ivry"
 
 こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
 
-今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことで、実際にお会いしているプロの方だったので感動しました！
+今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことで、お会いしたことのあるプロの方だったので感動しました！
 
 そして、優勝するとビリヤード台の上でパフォーマンスをするという慣例があるのですが、その優勝した日本人プロの方は靴を脱いで台に上がり、日本人らしさを感じました笑
 
@@ -33,7 +33,7 @@ IVRyはAIによる電話自動応答サービスを提供している会社で�
 ![AI Agentでセールス活動の効率化](/images/databricks-ai-agent-supervisor.md/ysdyt.png)
 *引用: [Databricks After Party 2025 LTスライド](https://ysdyt.dev/posts/2025/12/databricks-after-party-2025-LT)*
 
-弊社ではあらゆるデータがDatabricksに集まっているため、その環境を活かしてDatabricksと親和性が高いLangGraphベースのAI Agentを構築しました。実験的に作成したのが、Agentが複数の異なるデータソースにアクセスしながら、ユーザーがボタン一つで資料のドラフトを作成できるサービスです。
+弊社ではあらゆるデータがDatabricksに集まっているため、その環境を活かしてDatabricksと親和性が高いLangGraphベースのAI Agentを構築しました。Agentが複数の異なるデータソースにアクセスし、ユーザーがボタン一つで資料のドラフトを作成できるサービスを実験的に開発しています。
 
 1つのAgentで全てを処理するのではなく、役割ごとにAgentを分割し、それを統括するSupervisor Agentが全体を制御するアーキテクチャを採用しました。
 
@@ -51,12 +51,12 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 ## アーキテクチャの全体像
 
-実際に構築したマルチAgentは以下のような構成です。
+実際に構築したMulti-Agentは以下のような構成です。
 
 ![Supervisor Agentの構成](/images/databricks-ai-agent-supervisor.md/supervisor_agent.png)
 
 - **Supervisor Agent**: ユーザーからのリクエストを受け取り、適切なSub Agentにルーティングし、回答を統合してユーザーに返す
-- **情報取得Agent**: データ基盤上の企業の基本情報を検索・取得
+- **企業情報取得Agent**: データ基盤上の企業の基本情報を検索・取得
 - **議事録取得Agent**: ミーティングの議事録データを取得・要約
 - **提案資料作成Agent**: 収集した情報をもとに提案資料のドラフトを生成
 
@@ -66,7 +66,7 @@ Supervisor Agentパターンとは、1つの親Agentがユーザーのリクエ�
 
 ## UDFsの作成
 
-Agentが自由にデータにアクセスすると予期せぬ挙動が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)を作成して制限しました。これによりデータ取得の揺らぎを最小限にしています。
+Agentが自由にSQLを発行するとスキーマの誤認識や不要なデータ取得が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)を作成してデータアクセスを制限しました。これによりAgentの挙動を安定させています。
 
 以下のようにSQLを実行すればUnity Catalog上に関数を作ることができます。ただ、まだTerraformで管理できないので、今後のアップデートが待ち遠しいですね。
 
@@ -390,16 +390,16 @@ MLflowでモデルをバージョン管理できるため、プロンプトや�
 
 # Agent Bricksへの期待
 
-現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになり、とても待ち遠しいです。
+現在、Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。日本リージョンへの展開がとても待ち遠しいです。
 https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
-DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いており、毎回りリースを楽しみにしています！
+DatabricksのAgent関連の機能はアップデートが非常に活発で、新機能のリリースが続いており、毎回リリースを楽しみにしています！
 
 # まとめ
 
-本記事では、Databricks上でSupervisor Agentを構築した事例を紹介しました。
+本記事では、Databricks上でLangGraphを使ったSupervisor型Multi-Agentを構築した事例を紹介しました。
 
-Databricksのエコシステムを活用することで、開発からデプロイまでを一気通貫で行える環境が整っています。今までAI Agentを作ったことがなく、社内で実験的に試してみたい方にはお勧めです。さらにDatabricks Appsと組み合わせればAgentを使った社内アプリも簡単に構築できます。こういったトータルソリューションで展開できるところもDatabricksの魅力の一つです。
+半年前までAI Agentを触ったことすらなかった自分でも、Databricksのエコシステムを活用することで、Agent定義からMLflowでの登録・評価・デプロイまでを一気通貫で行うことができました。社内で実験的にAI Agentを試してみたい方にはお勧めです。さらにDatabricks Appsと組み合わせればAgentを使った社内アプリも簡単に構築できます。こういったトータルソリューションで展開できるところもDatabricksの魅力の一つです。
 
 ---
 
