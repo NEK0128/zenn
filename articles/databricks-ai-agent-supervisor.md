@@ -95,7 +95,7 @@ RETURN
 
 ## Agent定義の作成
 
-各サブAgentは、Pythonファイルとして定義します。以下は従業員検索Agentの例です。LangGraphの`create_react_agent`を使い、UDFsをツールとして渡すだけでAgentが作れます。ポイントは以下の4ステップです。
+各Sub Agentは、Pythonファイルとして定義します。以下は企業情報取得Agentの例です。LangGraphの`create_react_agent`を使い、UDFsをツールとして渡すだけでAgentが作れます。ポイントは以下の4ステップです。
 
 1. `mlflow.models.ModelConfig()` でMLflow登録時に渡される設定値を取得
 2. `UCFunctionToolkit` でUDFsをAgentのツールとして利用可能にする
@@ -114,12 +114,12 @@ LLM_ENDPOINT = model_config.get("llm_endpoint")
 WAREHOUSE_ID = model_config.get("warehouse_id")
 
 UC_FUNCTIONS = [
-    "dummy_catalog.dummy_schema.search_member",
+    "dummy_catalog.dummy_schema.search_company",
 ]
 
-SYSTEM_PROMPT = """あなたは従業員検索エージェントです。
-入力された名前から従業員情報を検索し、以下のJSON形式で返してください。
-{"name": "名前", "email": "メールアドレス", "team_name": "チーム名"}
+SYSTEM_PROMPT = """あなたは企業情報取得エージェントです。
+入力された企業名から企業情報を検索し、以下のJSON形式で返してください。
+{"account_id": "アカウントID", "name": "企業名", "industry": "業種", "location": "所在地"}
 見つからない場合はnullを返し、理由を記載してください。
 """
 
@@ -136,7 +136,6 @@ agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
 # Step 4: このAgentをMLflowのモデルとして登録可能にする
 
 mlflow.models.set_model(agent)
-
 ```
 
 ## MLflowでのサブAgent登録
@@ -221,12 +220,12 @@ def register_agent(
 result = register_agent(
     catalog=CATALOG,
     schema=SCHEMA,
-    model_name="member_search_agent",
-    definition_file="member_search_agent_definition.py",
+    model_name="company_search_agent",
+    definition_file="company_search_agent_definition.py",
     llm_endpoint=LLM_ENDPOINT,
     warehouse_id=WAREHOUSE_ID,
     input_example={
-        "messages": [{"role": "user", "content": "田中さんを検索してください"}]
+        "messages": [{"role": "user", "content": "〇〇株式会社を検索してください"}]
     },
 )
 print(f"Agent 登録完了! Version: {result['version']}")
