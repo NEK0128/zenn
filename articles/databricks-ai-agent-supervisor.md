@@ -138,11 +138,11 @@ agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
 mlflow.models.set_model(agent)
 ```
 
-## MLflowでのサブAgent登録
+## MLflowでのSub Agent登録
 
 作成したAgent定義ファイルを、**MLflow**を使ってUnity Catalogに登録します。これにより、バージョン管理やデプロイが容易になります。
 
-まず、共通設定とトレーシングの有効化です。トレーシングを有効にすると実行時のプロンプト情報などが記録され、後の評価に役立ちます。
+まずはトレーシングの有効化です。トレーシングを有効にすると実行時のプロンプト情報などが記録され、後の評価に役立ちます。
 
 ```python
 import mlflow
@@ -158,9 +158,9 @@ mlflow.langchain.autolog(log_traces=True)
 
 次に、Agent定義ファイルをMLflowに記録し、Unity Catalogに登録する関数を定義します。ポイントは以下の3ステップです。
 
-1. `mlflow.langchain.log_model` でAgent定義ファイルをMLflowに記録
-2. `mlflow.register_model` でUnity Catalogに登録
-3. エイリアス（`latest`）を設定してサービングから参照できるようにする
+1. **`mlflow.langchain.log_model`** — AgentのPythonファイルをMLflowのExperimentにアーティファクトとして記録する。この時点ではまだ外部から参照できない「下書き」のような状態
+2. **`mlflow.register_model`** — 記録したモデルをUnity Catalogに正式に登録する。これにより `models:/catalog.schema.model_name` というURIで他のコードから参照可能になる
+3. **エイリアスの設定** — 登録したモデルに `latest` などの別名を付ける。バージョン番号（1, 2, 3...）の代わりに `models:/catalog.schema.model_name@latest` のように名前で参照できるため、モデル更新時に呼び出し側のコード変更が不要になる
 
 ```python
 def register_agent(
