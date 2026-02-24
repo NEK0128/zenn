@@ -8,7 +8,7 @@ publication_name: "ivry"
 ---
 
 
-こんにちは、IVRy でデータエンジニアとして働いている松田 健司([@ken_3ba](https://x.com/ken_3ba))です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
+こんにちは、IVRyでデータエンジニアとして働いている松田健司（[@ken_3ba](https://x.com/ken_3ba))です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
 
 今年に入って、ビリヤードの世界大会で日本人の女性と男性がそれぞれ優勝しました！ビリヤードはマイナースポーツなのでご存知ない方も多いかもしれませんが、これは本当にすごいことでとても感動しました！
 
@@ -22,24 +22,40 @@ publication_name: "ivry"
 
 今回は、業務効率化のためにDatabricks上でLangGraphベースのSupervisor Agentを構築した話をします。設計からMLflowでの登録・評価までを紹介します。
 
-半年前までAI Agentを触ったことすらなかった自分でも、Databricksを使えばかなり簡単に構築できました。同じ境遇の方の参考になれば幸いです。
+半年前までAI Agentを触ったことすらなかった自分でも、Databricksを使えばかなり簡単に構築できました。「自分でもAIエージェントを作ってみたい！」という方、ぜひこの記事を参考にチャレンジしてみてください！
 
 # なぜAgentを作ったのか
 
 IVRyはAIによる電話自動応答サービスを提供しており、社内でも営業活動にアイブリーを利用しています。そこから得られるデータを活用し、セールスチームの業務を支援する社内サービスを実験的に開発しています。
 
-例えば、「アポイント電話の終話直後に次の提案資料が自動生成されている」、といった体験を目指しています。今回はその第一歩として、複数のデータソースから情報を集め、ボタン一つで資料のドラフトを作成できるサービスを作りました。
+たとえば、「アポイント電話の終話直後に次の提案資料が自動生成されている」、といった体験を目指しています。今回はその第一歩として、複数のデータソースから情報を集め、ボタン1つで資料のドラフトを作成できるサービスを作りました。
 
 ![AI Agentでセールス活動の効率化](/images/databricks-ai-agent-supervisor.md/ysdyt.png)
 *引用: [Databricks After Party 2025 LTスライド](https://ysdyt.dev/posts/2025/12/databricks-after-party-2025-LT)*
 
-弊社ではあらゆるデータがDatabricksに集まっているため、Databricks上でAI Agentを構築しました。実験的な開発ということもあり、Databricksとの組み合わせ事例が多く参考にしやすかったLangGraphをAgentフレームワークとして採用しています。
+弊社ではあらゆるデータがDatabricksに集まっているため、Databricks上でAI Agentを構築しました。実験的な開発ということもあり、Databricksとの組み合わせ事例が多く参考にしやすかった[LangGraph](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/langgraph)をAgentフレームワークとして採用しています。
 
 # Agentの設計
 
 ## Supervisor Agentにした理由
 
 Supervisor Agentパターンとは、親Agentがリクエストを解析し、適切なSub Agentに処理を委譲するアーキテクチャです。各Sub Agentが結果を返し、Supervisorがそれを統合して回答します。
+
+Multi-Agentの構成パターンには、以下のようなものがあります[^multi-agent-patterns]。
+
+![Multi-Agentの構成パターン](/images/databricks-ai-agent-supervisor.md/multi_agent_patterns.png)
+
+| パターン | 説明 |
+| --- | --- |
+| **ネットワーク型** | すべてのAgentが互いに自由に通信でき、どのAgentも次にどのAgentを呼ぶか決定できる |
+| **Supervisor型** | 各Agentが単一のSupervisor Agentと通信し、Supervisorが次の呼び出しAgentを決定する |
+| **Supervisor（ツール型）** | Agentをツールとして扱い、Supervisor Agentがツール呼び出し可能なLLMを使って、どのAgentを呼ぶかおよび引数を決定する |
+| **階層型** | Supervisorの上位にさらに別のSupervisorを置くことで、階層構造を作り管理を効率化する |
+| **カスタム型** | 特定のニーズに応じてAgent同士の接続を自由に定義する |
+
+[^multi-agent-patterns]: [Multi-Agentの構成パターン - Qiita](https://qiita.com/yamato0811/items/54117737efd4a066531e#multi-agent%E3%81%AE%E6%A7%8B%E6%88%90%E3%83%91%E3%82%BF%E3%83%BC%E3%83%B3)
+
+今回はSupervisor（ツール型）を採用しました。Sub Agentを`@tool`でツール化し、SupervisorのLLMがどのSub Agentを呼ぶかを自律的に判断する構成です。以降、本記事ではこれを単にSupervisorと呼びます。
 
 採用した理由は以下です。
 
@@ -53,18 +69,18 @@ Supervisor Agentパターンとは、親Agentがリクエストを解析し、�
 
 ![Supervisor Agentの構成](/images/databricks-ai-agent-supervisor.md/supervisor_agent.png)
 
-- **Supervisor Agent**: リクエストを受け取り、Sub Agentにルーティングし、結果を統合して返す
-- **企業情報取得Agent**: 企業の基本情報を検索・取得
-- **議事録取得Agent**: ミーティングの議事録を取得・要約
-- **提案資料作成Agent**: 収集した情報から提案資料のドラフトを生成
+- <span style="color: #3b82f6">**Supervisor Agent**</span>: リクエストを受け取り、Sub Agentにルーティングし、結果を統合して返す → [コード](#mlflow%E3%81%A7%E3%81%AEsupervisor-agent%E7%99%BB%E9%8C%B2)
+- <span style="color: #22c55e">**企業情報取得Agent**</span>: 企業の基本情報を検索・取得 → [コード](#agent%E5%AE%9A%E7%BE%A9%E3%81%AE%E4%BD%9C%E6%88%90)
+- <span style="color: #f59e0b">**議事録取得Agent**</span>: ミーティングの議事録を取得・要約
+- <span style="color: #a855f7">**提案資料作成Agent**</span>: 収集した情報から提案資料のドラフトを生成
 
-データはUnity Catalogに格納し、UDFs経由でアクセスします。
+データは[Unity Catalog](https://docs.databricks.com/aws/ja/data-governance/unity-catalog/)に格納し、[UDFs](https://docs.databricks.com/aws/ja/udf/unity-catalog)経由でアクセスします。
 
 # やってみた
 
 ## UDFsの作成
 
-Agentが自由にSQLを発行するとスキーマの誤認識や不要なデータ取得が起きるため、Databricksの[UDFs](https://docs.databricks.com/gcp/en/udf/unity-catalog)でデータアクセスを制限しています。
+Agentが自由にSQLを発行するとスキーマの誤認識や不要なデータ取得が起きるため、Databricksの[UDFs](https://docs.databricks.com/aws/ja/udf/unity-catalog)でデータアクセスを制限しています。
 
 以下のようにSQLでUnity Catalog上に関数を作れます。まだTerraformで管理できないので、今後のアップデートが待ち遠しいですね。
 
@@ -93,11 +109,11 @@ RETURN
 
 ## Agent定義の作成
 
-各Sub AgentはPythonファイルとして定義します。以下は企業情報取得Agentの例です。`create_react_agent`にUDFsをツールとして渡すだけでAgentが作れます。
+各Sub AgentはPythonファイルとして定義します。以下は<span style="color: #22c55e">**企業情報取得Agent**</span>の例です。[`create_react_agent`](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/langgraph)にUDFsをツールとして渡すだけでAgentが作れます。
 
-1. **`ModelConfig()`** — MLflow登録時の設定値を取得
-2. **`UCFunctionToolkit`** — UDFsをAgentのツールとして利用可能にする。データアクセスをUDFs経由に制限できる
-3. **`create_react_agent`** — LLMとツールでReActパターンのAgentを作成
+1. **[`ModelConfig()`](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/log-agent)** — [MLflow](https://docs.databricks.com/aws/ja/mlflow/)登録時の設定値を取得
+2. **[`UCFunctionToolkit`](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/agent-tool)** — UDFsをAgentのツールとして利用可能にする。データアクセスをUDFs経由に制限できる
+3. **[`create_react_agent`](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/langgraph)** — LLMとツールでReActパターンのAgentを作成
 4. **`set_model`** — MLflowのモデルとして登録可能にする
 
 ```python
@@ -138,7 +154,7 @@ mlflow.models.set_model(agent)
 
 ## MLflowでのSub Agent登録
 
-作成したAgent定義ファイルをMLflowでUnity Catalogに登録します。まずトレーシングを有効化します。
+作成したAgent定義ファイルを[MLflow](https://docs.databricks.com/aws/ja/mlflow/)で[Unity Catalog](https://docs.databricks.com/aws/ja/data-governance/unity-catalog/)に登録します。まずトレーシングを有効化します。
 
 ```python
 import mlflow
@@ -154,8 +170,8 @@ mlflow.langchain.autolog(log_traces=True)
 
 次に、Agent定義ファイルをMLflowに記録し、Unity Catalogに登録する関数を定義します。
 
-1. **`log_model`** — AgentのPythonファイルをMLflowに記録する。まだ外部から参照できない「下書き」状態
-2. **`register_model`** — Unity Catalogに正式登録し、`models:/catalog.schema.model_name` のURIで参照可能にする
+1. **[`log_model`](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/log-agent)** — AgentのPythonファイルをMLflowに記録する。まだ外部から参照できない「下書き」状態
+2. **[`register_model`](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/register-agent)** — Unity Catalogに正式登録し、`models:/catalog.schema.model_name` のURIで参照可能にする
 3. **エイリアス設定** — `@latest` などの別名を付け、モデル更新時に呼び出し側のコード変更を不要にする
 
 ```python
@@ -229,11 +245,11 @@ print(f"Agent 登録完了! Version: {result['version']}")
 
 ## MLflowでのSupervisor Agent登録
 
-次にSupervisor Agentを登録します。ポイントはSub Agentを`@tool`でツール化し、Supervisorから呼び出す点です。
+次に<span style="color: #3b82f6">**Supervisor Agent**</span>を登録します。ポイントはSub Agentを`@tool`でツール化し、Supervisorから呼び出す点です。
 
 1. **`load_agent_model`** — Unity Catalog登録済みのSub Agentをエイリアスでロード。Sub Agent更新時もSupervisor側の変更不要
-2. **`@tool`** — 各Sub AgentをLangChainのツールとして定義。SupervisorのLLMがどのSub Agentを呼ぶか自律的に判断する
-3. **`create_react_agent`** — Supervisor自身もReActパターンで作成。Sub Agentと同じ仕組みでアーキテクチャが統一される
+2. **[`@tool`](https://python.langchain.com/docs/how_to/custom_tools/)** — 各Sub AgentをLangChainのツールとして定義。SupervisorのLLMがどのSub Agentを呼ぶか自律的に判断する
+3. **[`create_react_agent`](https://docs.databricks.com/aws/ja/generative-ai/agent-framework/langgraph)** — Supervisor自身もReActパターンで作成。Sub Agentと同じ仕組みでアーキテクチャが統一される
 
 ```python
 import mlflow
@@ -353,11 +369,11 @@ print(result["messages"][-1].content)
 
 実行すると、以下の流れで処理されます。
 
-1. **Supervisor**が質問を解析し、必要なSub Agentを判断
-2. **企業情報取得Agent**が企業情報を検索
-3. **議事録取得Agent**が関連する議事録を取得
-4. **資料作成Agent**が提案資料のドラフトを生成
-5. **Supervisor**が結果を統合して回答
+1. <span style="color: #3b82f6">**Supervisor**</span>が質問を解析し、必要なSub Agentを判断
+2. <span style="color: #22c55e">**企業情報取得Agent**</span>が企業情報を検索
+3. <span style="color: #f59e0b">**議事録取得Agent**</span>が関連する議事録を取得
+4. <span style="color: #a855f7">**資料作成Agent**</span>が提案資料のドラフトを生成
+5. <span style="color: #3b82f6">**Supervisor**</span>が結果を統合して回答
 
 # MLflowを使ってみて便利だったこと
 
@@ -365,7 +381,7 @@ print(result["messages"][-1].content)
 
 ## MLflow Tracing
 
-`mlflow.langchain.autolog()` を有効にすると、Agentの処理フローが自動トレーシングされます。どのSub Agentがどんな結果を返したか可視化され、デバッグに役立ちます。
+[`mlflow.langchain.autolog()`](https://docs.databricks.com/aws/ja/mlflow/mlflow-tracing) を有効にすると、Agentの処理フローが自動トレーシングされます。どのSub Agentがどんな結果を返したか可視化され、デバッグに役立ちます。
 
 ![MLflow Tracing](/images/databricks-ai-agent-supervisor.md/mlflow_trace.png)
 *引用: [DatabricksにおけるMLflow Tracing](https://qiita.com/taka_yayoi/items/35c96ecd401c199e617b)*
@@ -379,7 +395,7 @@ MLflowの評価機能で、モデルごとの出力を並べて比較できま�
 
 ## モデルのバージョン管理とデプロイ
 
-MLflowでモデルをバージョン管理でき、Databricks Asset Bundlesを使えばModel Servingとして簡単にAPIデプロイできます。
+[MLflow](https://docs.databricks.com/aws/ja/mlflow/)でモデルをバージョン管理でき、[Databricks Asset Bundles](https://docs.databricks.com/aws/ja/dev-tools/bundles/)を使えば[Model Serving](https://docs.databricks.com/aws/ja/machine-learning/model-serving/)として簡単にAPIデプロイできます。
 
 ![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.png)
 *引用: [Workspace Model Registry の例](https://docs.databricks.com/aws/ja/mlflow/workspace-model-registry-example)*
@@ -393,7 +409,7 @@ https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
 業務効率化のためにDatabricks上でLangGraphベースのSupervisor Agentを構築し、設計からMLflowでの登録・評価までを紹介しました。
 
-Databricksを使えば、Agent定義からMLflowでの登録・評価・デプロイまで一気通貫で行えます。Databricks Appsと組み合わせれば社内アプリも簡単に構築でき、こうしたトータルソリューションがDatabricksの魅力です。
+Databricksを使えば、Agent定義から[MLflow](https://docs.databricks.com/aws/ja/mlflow/)での登録・評価・デプロイまで一気通貫で行えます。[Databricks Apps](https://docs.databricks.com/aws/ja/dev-tools/databricks-apps/)と組み合わせれば社内アプリも簡単に構築でき、こうしたトータルソリューションがDatabricksの魅力です。
 
 ---
 
