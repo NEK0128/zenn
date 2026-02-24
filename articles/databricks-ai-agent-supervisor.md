@@ -3,7 +3,7 @@ title: "DatabricksでSupervisor Agentを構築してみた"
 emoji: "🤖"
 type: "tech"
 topics: ["Databricks", "LangGraph", "AIAgent", "MLflow", "Python"]
-published: false
+published: true
 publication_name: "ivry"
 ---
 
