@@ -52,6 +52,7 @@ Supervisor Agentパターンとは、親Agentがリクエストを解析し、�
 | **カスタム型** | 特定のニーズに応じてAgent同士の接続を自由に定義する |
 
 ![Multi-Agentの構成パターン](/images/databricks-ai-agent-supervisor.md/multi_agent_patterns.png)
+*引用: [Multi-Agentシステム概要 - Qiita](https://qiita.com/yamato0811/items/54117737efd4a066531e#multi-agent%E3%81%AE%E6%A7%8B%E6%88%90%E3%83%91%E3%82%BF%E3%83%BC%E3%83%B3)*
 
 今回はSupervisor（ツール型）（以降、本記事では単にSupervisorと呼びます）を採用しました。Sub Agentを`@tool`でツール化し、SupervisorのLLMがどのSub Agentを呼ぶかを自律的に判断する構成です。
 
