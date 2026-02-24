@@ -28,14 +28,12 @@ publication_name: "ivry"
 
 IVRyはAIによる電話自動応答サービスを提供しており、社内でも営業活動にアイブリーを利用しています。そこから得られるデータを活用し、セールスチームの業務を支援する社内サービスを実験的に開発しています。
 
-例えば、アポイント電話の終話直後にミーティング資料が自動生成されている、といった体験を目指しています。
+例えば、「アポイント電話の終話直後に次の提案資料が自動生成されている」、といった体験を目指しています。今回はその第一歩として、複数のデータソースから情報を集め、ボタン一つで資料のドラフトを作成できるサービスを作りました。
 
 ![AI Agentでセールス活動の効率化](/images/databricks-ai-agent-supervisor.md/ysdyt.png)
 *引用: [Databricks After Party 2025 LTスライド](https://ysdyt.dev/posts/2025/12/databricks-after-party-2025-LT)*
 
-弊社ではあらゆるデータがDatabricksに集まっているため、LangGraphベースのAI Agentを構築しました。複数のデータソースから情報を集め、ボタン一つで資料のドラフトを作成できるサービスです。
-
-役割ごとにAgentを分割し、Supervisor Agentが全体を制御するアーキテクチャを採用しました。
+弊社ではあらゆるデータがDatabricksに集まっているため、Databricks上でAI Agentを構築しました。実験的な開発ということもあり、Databricksとの組み合わせ事例が多く参考にしやすかったLangGraphをAgentフレームワークとして採用しています。
 
 # Agentの設計
 
@@ -51,7 +49,7 @@ Supervisor Agentパターンとは、親Agentがリクエストを解析し、�
 
 ## アーキテクチャの全体像
 
-実際に構築したMulti-Agentは以下のような構成です。
+実際に構築したSupervisor Agentは以下のような構成です。
 
 ![Supervisor Agentの構成](/images/databricks-ai-agent-supervisor.md/supervisor_agent.png)
 
@@ -381,14 +379,14 @@ MLflowの評価機能で、モデルごとの出力を並べて比較できま�
 
 ## モデルのバージョン管理とデプロイ
 
-MLflowでモデルをバージョン管理でき、Databricks Asset Bundles（DAB）を使えばModel Servingとして簡単にAPIデプロイできます。
+MLflowでモデルをバージョン管理でき、Databricks Asset Bundlesを使えばModel Servingとして簡単にAPIデプロイできます。
 
 ![モデルのバージョン管理](/images/databricks-ai-agent-supervisor.md/mode_version.png)
 *引用: [Workspace Model Registry の例](https://docs.databricks.com/aws/ja/mlflow/workspace-model-registry-example)*
 
 # Agent Bricksへの期待
 
-Databricksでは**Agent Bricks**（Mosaic AI Agent Framework）がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。日本リージョンへの展開が待ち遠しいです。
+Databricksでは**Agent Bricks**がすでに海外リージョンで公開されており、より簡単にAgentを作成できるようになります。日本リージョンへの展開が待ち遠しいです。
 https://docs.databricks.com/aws/ja/generative-ai/agent-bricks/
 
 # まとめ
