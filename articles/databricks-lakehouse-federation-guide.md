@@ -201,4 +201,7 @@ Lakehouse Federationの導入により、これまでテーブルごとにジョ
 
 ---
 
-IVRyではデータエンジニアを募集しています！興味のある方は[採用情報](https://ivry-jp.notion.site/IVRy-e1d47e4a79ba4f8e81c1a1cb3e34dc18)をご覧ください。
+IVRyではキャリア登録やカジュアル面談の機会をご用意しています。ご興味のある方はぜひ以下よりお申し込みください。
+
+https://herp.careers/v1/ivry/wmZiOSAmZ4SQ
+https://www.notion.so/209eea80adae800483a9d6b239281f1b?pvs=21
