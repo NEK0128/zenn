@@ -128,7 +128,7 @@ https://docs.databricks.com/aws/en/security/network/serverless-network-security/
 
 https://docs.databricks.com/aws/en/query-federation/foreign-catalogs
 
-# テーブル同期の自動化
+## テーブル同期の自動化
 
 アーキテクチャが決まった後は、実際にdltHubからFederationへ乗り換えるためのNotebookジョブを作成しました。
 
