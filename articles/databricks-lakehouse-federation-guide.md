@@ -3,7 +3,7 @@ title: "Databricks Lakehouse Federationで運用負荷ゼロのデータ連携"
 emoji: "🌐"
 type: "tech"
 topics: ["Databricks", "Federation"]
-published: false
+published: true
 publication_name: "ivry"
 ---
 
