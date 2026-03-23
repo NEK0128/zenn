@@ -39,7 +39,7 @@ https://docs.databricks.com/aws/en/query-federation
 ## AS-IS: バッチ同期による連携
 
 Lakehouse Federationを導入する前のIVRyのデータ・AI基盤の全体構成は、以前Findy Toolsで公開した通りです。
-![アーキテクチャ図](/images/databricks-lakehouse-federation-guide/architecture.png)
+![アーキテクチャ図](/images/databricks-lakehouse-federation-guide.md/architecture.png)
 *引用: [Findy Tools - IVRyのデータ・AI基盤](https://findy-tools.io/companies/ivry/90/76)*
 https://findy-tools.io/companies/ivry/90/76
 
@@ -48,7 +48,7 @@ https://findy-tools.io/companies/ivry/90/76
 プロダクト側で新しいテーブルやカラムが追加されると、データ基盤で利用するには以下の手順が必要でした。
 
 1. 開発者がSlackでテーブル追加を申請
-![テーブル追加申請](/images/databricks-lakehouse-federation-guide/request.png)
+![テーブル追加申請](/images/databricks-lakehouse-federation-guide.md/request.png)
 2. データエンジニアがdltHubのジョブに対象テーブルを追加し、生データをDelta Tableに取り込む
 3. dbtでsourceのViewを作成
 
