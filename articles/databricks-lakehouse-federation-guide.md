@@ -39,14 +39,16 @@ https://docs.databricks.com/aws/en/query-federation
 ## AS-IS: バッチ同期による連携
 
 Lakehouse Federationを導入する前のIVRyのデータ・AI基盤の全体構成は、以前Findy Toolsで公開した通りです。
-(TODO:アーキテクチャの図をはり、引用を載せる)
+![アーキテクチャ図](/images/databricks-lakehouse-federation-guide/architecture.png)
+*引用: [Findy Tools - IVRyのデータ・AI基盤](https://findy-tools.io/companies/ivry/90/76)*
 https://findy-tools.io/companies/ivry/90/76
 
 このアーキテクチャのうち、Aurora PostgreSQLのデータ連携部分では[dltHub](https://dlthub.com/)を使ってDelta Tableにバッチ同期し、Databricksにデータをコピーしていました。
 
 プロダクト側で新しいテーブルやカラムが追加されると、データ基盤で利用するには以下の手順が必要でした。
 
-1. 開発者がSlackでテーブル追加を申請 (TODO:実際に申請した図をはる)
+1. 開発者がSlackでテーブル追加を申請
+![テーブル追加申請](/images/databricks-lakehouse-federation-guide/request.png)
 2. データエンジニアがdltHubのジョブに対象テーブルを追加し、生データをDelta Tableに取り込む
 3. dbtでsourceのViewを作成
 
@@ -174,7 +176,6 @@ graph TD
 ## NLBのPrivateLink設定
 
 NCCの設定でDatabricks側はEstablished、AWS側の設定も適切に見えるのに、なぜかPrivateLink経由でアクセスできない問題がありました。
-(TODO:図を載せる)
 
 何度もサポートに問い合わせて確認したところ、PrivateLink経由でNLBに接続する場合、NLBの `enforce_security_group_inbound_rules_on_private_link_traffic` を **OFF** にする必要があり、この設定がデフォルトのONのままでした。この設定がONだと、PrivateLink経由のトラフィックがセキュリティグループのインバウンドルールによってブロックされます。PrivateLink経由のソースIPは予測不能なため、セキュリティグループで許可することが困難です。
 
