@@ -11,7 +11,7 @@ publication_name: "ivry"
 
 先日、年に一度のアマチュア最大の大会「全日本アマチュアナインボール選手権大会」の東京予選に出場しました。101人中わずか6人しか本選に進めない狭き門で、9ボールの7先（先に7ラック取った方が勝ち）で戦います。2回戦まで進んだのですが、6-6のヒルヒル（お互いあと1ラックで勝ち）から最後にミスして敗退しました。悔しい...
 
-![全日本アマチュアナインボール選手権大会の本選会場](/images/databricks-lakehouse-federation-guide.md/IMG_3275.jpg)
+![全日本アマチュアナインボール選手権大会の本選会場](/images/databricks-lakehouse-federation-guide/IMG_3275.jpg)
 *全日本アマチュアナインボール選手権大会の本選特設会場。いつかここで撞きたい。*
 
 さて、本日のビリヤードの話はこのへんで切り上げて本題に入ります！
@@ -39,7 +39,7 @@ https://docs.databricks.com/aws/en/query-federation
 ## AS-IS: バッチ同期による連携
 
 Lakehouse Federationを導入する前のIVRyのデータ・AI基盤の全体構成は、以前Findy Toolsで公開した通りです。
-![アーキテクチャ図](/images/databricks-lakehouse-federation-guide.md/architecture.png)
+![アーキテクチャ図](/images/databricks-lakehouse-federation-guide/architecture.png)
 *引用: [Findy Tools - IVRyのデータ・AI基盤](https://findy-tools.io/companies/ivry/90/76)*
 https://findy-tools.io/companies/ivry/90/76
 
@@ -48,7 +48,7 @@ https://findy-tools.io/companies/ivry/90/76
 プロダクト側で新しいテーブルやカラムが追加されると、データ基盤で利用するには以下の手順が必要でした。
 
 1. 開発者がSlackでテーブル追加を申請
-![テーブル追加申請](/images/databricks-lakehouse-federation-guide.md/request.png)
+![テーブル追加申請](/images/databricks-lakehouse-federation-guide/request.png)
 2. データエンジニアがdltHubのジョブに対象テーブルを追加し、生データをDelta Tableに取り込む
 3. dbtでsourceのViewを作成
 
