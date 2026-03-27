@@ -1,5 +1,5 @@
 ---
-title: "IVRyから3名がJEDAI Order 2026を受賞しました！"
+title: "IVRyから3名がDatabricks JEDAI Order 2026を受賞！IVRyのDatabricks関連記事も一挙紹介"
 emoji: "🏅"
 type: "idea"
 topics: ["Databricks", "コミュニティ", "IVRy", "JEDAI"]
