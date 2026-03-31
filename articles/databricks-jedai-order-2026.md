@@ -3,7 +3,7 @@ title: "IVRyから3名がDatabricks JEDAI Order 2026を受賞！IVRyのDatabrick
 emoji: "🏅"
 type: "idea"
 topics: ["Databricks", "コミュニティ", "IVRy", "JEDAI"]
-published: false
+published: true
 publication_name: "ivry"
 ---
 
