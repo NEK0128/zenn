@@ -1,8 +1,8 @@
 ---
-title: "データエンジニア10年の失敗談 —— 履歴喪失とリアルタイム化、要件定義から学んだ教訓"
+title: "データエンジニアの失敗談：要件定義で全てが決まる"
 emoji: "🪤"
 type: "idea"
-topics: ["データエンジニアリング", "Databricks", "失敗談", "要件定義", "IVRy"]
+topics: ["データエンジニアリング", "要件定義", "IVRy"]
 published: false
 publication_name: "ivry"
 ---
