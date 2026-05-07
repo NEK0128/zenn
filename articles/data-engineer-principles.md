@@ -3,7 +3,7 @@ title: "ゼロからデータ基盤構築をした時の失敗談：すべては
 emoji: "🪤"
 type: "idea"
 topics: ["データエンジニアリング", "要件定義", "IVRy"]
-published: false
+published: true
 publication_name: "ivry"
 ---
 
