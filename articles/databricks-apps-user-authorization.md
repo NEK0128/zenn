@@ -3,7 +3,7 @@ title: "Databricks AppsのUser authorization（U2M）を試す —— ユーザ�
 emoji: "🔐"
 type: "tech"
 topics: ["Databricks", "UnityCatalog", "認証", "OAuth", "データ基盤"]
-published: false
+published: true
 publication_name: "ivry"
 ---
 
