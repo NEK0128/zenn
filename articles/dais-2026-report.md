@@ -7,27 +7,29 @@ published: false
 publication_name: "ivry"
 ---
 
-Data + AI Summit（以下 Summit）に参加してきました。
+こんにちは、IVRyでデータエンジニアとして働いている松田健司（[@ken_3ba](https://x.com/ken_3ba)）です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
 
-まず最初に、毎年恒例のビリヤードボールです。会場のクエストを達成するともらえるので、ビリヤードプレイヤーとしての使命感で集めてきました。
+今回は Data + AI Summit（以下 Summit）に参加してきたので、現地の様子と注目した発表をまとめます。
+
+その前に、ビリヤードの話だけさせてください。Summit には会場のクエストがあって、達成するとビリヤードボールがもらえます。ビリヤードプレイヤーとしての使命感で集めてきました。
 
 https://x.com/Data_AI_Summit/status/1933245536389198198
 
 https://x.com/ken_3ba/status/2067036954949239180
 
-ちなみに、会場の近くに本物のビリヤード場もあったみたいですが、行けなかったのが心残りです。
+ちなみに、会場の近くに本物のビリヤード場もあったみたいですが、行けなかったのが心残りです。それでは本題に入ります。
 
 ## TL;DR
 
-- Databricks の通底メッセージは「**AGI はもう来ている。問題は知能ではなく、その周りの4つの C（Context / Cost / Control / Choice）だ**」。Lakehouse を「エージェント時代の OS」と位置づけ、OLTP からマーケまで Unity Catalog 配下に垂直統合してきた。
-- 注目の新機能は **Genie One / Ontology（Context）、Unity AI Gateway（Cost）、Agent Bricks（Control）、LTAP・Lakebase（Choice）、CustomerLake**。Databricks は「AI がデータを理解し意思決定する基盤」に振り切っていた。
+- Databricks の通底メッセージは「**AGI はもう来ている。問題は知能ではなく、その周りの Context / Cost / Control / Choice だ**」。Lakehouse を「エージェント時代の OS」と位置づけ、OLTP からマーケまで Unity Catalog 配下に垂直統合してきた。
+- 発表の中心は **Genie One / Ontology、Unity AI Gateway、Agent Bricks、LTAP・Lakebase、CustomerLake**。Databricks は「AI がデータを理解し意思決定する基盤」に振り切っていた。
 - そして何より、現地に行く価値が大きい。発表をオンラインで見るのと、現場の熱狂の中で聞くのとでは、記憶への残り方も「帰ったら試すぞ」というモチベーションも全然違う。
 
-## IVRy は Databricks を導入したばかり
+## IVRy と Databricks
 
-私は IVRy でデータエンジニアをやっていて、Databricks を導入してからちょうど一年ほどになります。だからこそ、Databricks がこの先どこへ向かうのかを自分の目で確かめたくて、今回の Summit に参加しました。
+IVRy は2025年7月、データ・AI 活用を加速させる新基盤として、Databricks を中心としたプラットフォームを構築しました。データが増えるにつれて転送コストが膨らんだり、データと権限があちこちに散らばったりという課題があり、それらを一元管理できてクラウド内で完結し、AI 開発もしやすい基盤として Databricks を選んだ、という背景があります。
 
-通話やメールなどのコミュニケーションデータを AI が扱える形に変える「IVRy Data Hub」というプロダクトも、Databricks 基盤の上で動いています。
+通話やメールなどのコミュニケーションデータを AI が扱える形に変える「IVRy Data Hub」というプロダクトも、この Databricks 基盤の上で動いています。
 
 https://ivry.jp/function/datahub/
 
@@ -41,52 +43,43 @@ Data + AI Summit は、Databricks が年に一度開催する世界最大級の�
 
 https://www.databricks.com/dataaisummit
 
-実は前回も参加していたのですが、今回は規模が明らかに大きくなっていました。公式発表によると、現地参加は174カ国から31,309名。日本からも500名くらいは来ていたと聞きました。そして何より、今回も発表される機能がとても多かったです。
+前回は IVRy の別のメンバーが参加していたのですが、その一人が「今年は規模が明らかに大きくなっていた」と言っていました。公式発表によると、現地参加は174カ国から31,309名。日本からも500名くらいは来ていたと聞きました。そして何より、今回も発表される機能がとても多かったです。
 
-## Summit と Keynote の全体感：4つの C
+Databricks がこの先どこへ向かうのか、導入して一年ほどの自分の目で確かめたい。それが今回参加した一番の動機でした。
 
-Databricks CEO の Ali Ghodsi は、Keynote の冒頭で会場に「AGI はもう来ていると思う人？」と問いかけました。3万人のうち約9割が「来ていない」に手を挙げた。それに対して彼は「あなたたちは間違っている。もう来ている」と言い切りました。
+## Keynote の全体感
 
-その上で繰り返していたのが「**AI に足りないのは知能ではなく、コンテキストだ（AI doesn't have an intelligence problem, it has a context problem）**」というメッセージです。モデルはもう十分賢い。にもかかわらず AI が業務で使われないのは、それを取り巻く課題が解けていないからだ、と。Day 2 のアジェンダはこの「4つの C」で構成され、午前の発表はそれぞれが C のどれかを製品にしたものでした。
+Keynote を貫いていたのは「**AI に足りないのは知能ではなく、コンテキストだ（AI doesn't have an intelligence problem, it has a context problem）**」というメッセージでした。CEO の Ali Ghodsi は「AGI はもう来ている」と言い切ったうえで、モデルはもう十分賢いのに AI が業務で使われないのは、それを取り巻く課題が解けていないからだ、と話していました。
 
-<!-- ここに画像を入れる: 4つのC（Context / Cost / Control / Choice）の整理スライド -->
+その課題が Context / Cost / Control / Choice の4つです。組織のデータや業務を AI に理解させる Context、青天井になりがちな AI コストを抑える Cost、エージェントの暴走や情報漏えいを防ぐ Control、特定モデルやクラウドへのロックインを避ける Choice。発表された機能は、だいたいこのどれかに対応していました。
 
-この整理を聞いて、自分のなかでも腑に落ちました。私はもともと、Databricks はもう単なるデータ基盤ではなく、AI が業務を理解して意思決定するための基盤に向かっていると考えていました。テーブルを渡せば AI は SQL を書ける。でも「売上に返品を含むのか」「どの顧客 ID と契約 ID を紐づけるのか」といった業務文脈がないと、AI はもっともらしいがズレた答えを出す。4つの C は、まさにこのズレを埋めるための課題設定で、自分の感覚と同じ方向を向いていました。
+<!-- ここに画像を入れる: Context / Cost / Control / Choice の整理スライド -->
+
+この整理は、自分の感覚とも合っていました。私はもともと、Databricks はもう単なるデータ基盤ではなく、AI が業務を理解して意思決定するための基盤に向かっていると考えていました。テーブルを渡せば AI は SQL を書ける。でも「売上に返品を含むのか」「どの顧客 ID と契約 ID を紐づけるのか」といった業務文脈がないと、AI はもっともらしいがズレた答えを出す。今回いちばん力が入っていた Genie Ontology はこの Context をそのまま製品にしたものですし、マーケティング領域に踏み込んだ CustomerLake は、意思決定の基盤というビジョンを業務アプリの側から見せたものに感じました。
 
 そしてもう一つ、全体を貫いていたのが「**Lakehouse はエージェント時代の OS**」という位置づけです。これまで「データウェアハウスの代替」だった Databricks が、今回は OLTP（Lakebase）、リアルタイム分析（Lakehouse//RT）、ストリーミング取り込み（ZeroBus）、エージェント開発（Agent Bricks）、アプリ実行基盤（Apps）、マーケティング（CustomerLake）まで、すべてを Unity Catalog のガバナンス配下に統合してきました。「Databricks の中で完結させる」という設計を、本気で進めている印象でした。
 
-## Keynote で発表された新機能
+Keynote はオンラインでも見られます。雰囲気だけでも伝わると思うので、貼っておきます。
 
-今回発表された機能を、まず一覧でまとめておきます。数が多いので、4つの C を軸にざっと並べました。
+https://www.youtube.com/watch?v=Qux8E-L1mk8
 
-| カテゴリ | 主な発表 | ひとことで |
-|---|---|---|
-| Context | Genie One / Genie Ontology / Genie Code / Genie ZeroOps | 自然言語でデータを扱う AI 同僚と、その土台になる文脈レイヤー |
-| Context | Unity Catalog Metrics / Catalog Federation | 指標定義の統一と、カタログ横断のアクセス |
-| Cost | Unity AI Gateway | LLM のコスト・ルーティング・トレースを一元管理 |
-| Control | Agent Bricks | エージェントを安全に作って運用する基盤 |
-| Control | Omniagent（OSS） | エージェントハーネスを統一インターフェースで切り替える OSS |
-| Control | Lakewatch（Panther 買収） | セキュリティ運用をエージェントのワークロードに |
-| Choice / データ基盤 | LTAP / Lakebase | OLTP と OLAP を単一データで統合する新アーキテクチャ |
-| Choice / データ基盤 | Lakehouse//RT | Reyden エンジンによるリアルタイム分析（Beta） |
-| Choice / データ基盤 | ZeroBus | メッセージバス不要のサーバーレス取り込み API |
-| データ基盤 | Lakeflow Designer | エージェント時代のデータエンジニアリング |
-| アプリ | CustomerLake | Lakehouse に組み込まれたエージェント型 CDP |
-| ML | AI Runtime / Feature Store 拡張 / Model Serving 拡張 | サーバーレス GPU と、ML 基盤の各コンポーネント強化 |
+https://www.youtube.com/watch?v=sn9My5Pj0mE
 
-ここから、特に気になったものをいくつか取り上げます。
+## 発表された新機能
 
-### Context：Genie One / Genie Ontology
+ここからは、今回発表された機能を一つずつ紹介していきます。数が多いので、機能ごとに簡単な解説と、自分が感じたことを軽く添える形でいきます。
+
+### Genie One / Genie Ontology / Genie Code / Genie ZeroOps
 
 https://www.databricks.com/jp/blog/introducing-genie-one-genie-ontology-and-genie-agents
 
-Genie One は、Slack や Teams、モバイルアプリから自然言語でデータに問い合わせられる「AI の同僚」です。その裏側で効いているのが Genie Ontology で、テーブルやクエリ、ダッシュボードから組織の概念や指標、関係性を自動で抽出してグラフにします。OntRank という、Google の PageRank の発想を借りた仕組みで「どのデータソースが信頼できるか」まで判定してくれるのがおもしろい。
+Genie One は、Slack や Teams、モバイルアプリから自然言語でデータに問い合わせられる「AI の同僚」です。その裏側で効いているのが Genie Ontology で、テーブルやクエリ、ダッシュボードから組織の概念や指標、関係性を自動で抽出してグラフにします。OntRank という、Google の PageRank の発想を借りた仕組みで「どのデータソースが信頼できるか」まで判定してくれるのがおもしろい。ほかにも、ML 向けの Genie Code や、推論テーブルのデバッグを担う Genie ZeroOps が発表されていました。
 
-自分が見ているのはまさにこの Context の部分です。テーブルを渡すだけでは AI は正しく答えられない。意味を渡す層を製品として持ってきたのは、素直にうらやましいと思いました。
+テーブルを渡すだけでは AI は正しく答えられない。意味を渡す層を製品として持ってきたのは、素直にうらやましいと思いました。
 
 <!-- ここに画像を入れる: Genie One / Genie Ontology の画面 or 概念図 -->
 
-### Cost：Unity AI Gateway
+### Unity AI Gateway
 
 https://www.databricks.com/blog/introducing-ai-spend-controls-unity-ai-gateway
 
@@ -96,7 +89,7 @@ Ghodsi が Keynote で「これはものすごく高くつくぞ」とはっき�
 
 <!-- ここに画像を入れる: Unity AI Gateway の予算管理画面 -->
 
-### Control：Agent Bricks
+### Agent Bricks
 
 https://www.databricks.com/jp/blog/agent-bricks-dais-2026
 
@@ -106,21 +99,57 @@ https://www.databricks.com/jp/blog/agent-bricks-dais-2026
 
 <!-- ここに画像を入れる: Agent Bricks の構成図 or 画面 -->
 
-### Choice：LTAP / Lakebase
+### LTAP / Lakebase
 
 https://www.databricks.com/company/newsroom/press-releases/databricks-launches-ltap-first-lake-transactionalanalytical
 
 LTAP（Lake Transactional/Analytical Processing）は、トランザクション処理（OLTP）と分析処理（OLAP）を、レイク上の単一のデータコピーで統合するアーキテクチャです。40年間ずっと別々のシステムに分かれていた処理を、ETL や CDC を挟まずに一つにする、という話でした。その OLTP 側を担うのが、Postgres 互換のサーバーレス DB、Lakebase です。
 
-Git 風のブランチング機能で本番データに対して安全に実験できるようになるのは、開発者として地味にうれしいポイントでした。Iceberg 統合と合わせて、特定の製品やクラウドに縛られない選択肢（Choice）を取りやすくなる方向です。
+Git 風のブランチング機能で本番データに対して安全に実験できるようになるのは、開発者として地味にうれしいポイントでした。Iceberg 統合と合わせて、特定の製品やクラウドに縛られない選択肢を取りやすくなる方向です。
 
 <!-- ここに画像を入れる: LTAP のアーキテクチャ図 -->
 
-### CustomerLake：いちばん気になった発表
+### Lakehouse//RT
+
+https://www.databricks.com/jp/blog/introducing-lakehousert-real-time-performance-unified-lakehouse
+
+Reyden という新エンジンによるリアルタイム分析機能です。データを動かさずに、レイクハウス上で直接ミリ秒級の応答を返せる。デモでは高い同時実行のもとでも低レイテンシを維持していました。現時点では Beta で、読み取り専用です。
+
+お客さん向けのダッシュボードを速くしたい場面で効きそうだと感じました。
+
+<!-- ここに画像を入れる: Lakehouse//RT のデモ or ベンチマーク -->
+
+### ZeroBus
+
+ストリーミングのデータ取り込みを、Apache Kafka のようなメッセージバスを挟まずに、サーバーレスの push 型 API で直接 Delta テーブルに流せる仕組みです。間に挟むコンポーネントが減るので、構成がシンプルになります。
+
+通話などのイベントをリアルタイムに集計したいとき、間の運用が減るのはありがたい。
+
+<!-- ここに画像を入れる: ZeroBus の構成図 -->
+
+### Lakeflow Designer
+
+エージェント時代のデータエンジニアリングをうたう、パイプライン構築の機能です。dbt + Databricks で組んでいる今の構成と、どう棲み分くか・どこを置き換えられるかは、これから触って見極めたいところです。
+
+<!-- ここに画像を入れる: Lakeflow Designer の画面 -->
+
+### Omniagent（OSS）
+
+Claude Code や Codex、Cursor といったエージェントを、統一インターフェースで切り替えながら使える OSS のハーネスです。自分は個人でも複数のツールを使い分けているので、これを組織単位でやれるのは気になりました。社内で一度試してみたいです。
+
+<!-- ここに画像を入れる: Omniagent のイメージ -->
+
+### Lakewatch（Panther 買収）
+
+セキュリティ運用をエージェントのワークロードとして回す機能で、Panther の買収と合わせて発表されました。IVRy はまだ SIEM もセキュリティ運用チームも持っていないので今すぐの導入対象ではないですが、Databricks がセキュリティ領域まで内製してきたという流れは押さえておきたいところです。
+
+<!-- ここに画像を入れる: Lakewatch のイメージ -->
+
+### CustomerLake
 
 https://www.databricks.com/blog/introducing-customerlake-agentic-cdp
 
-データ基盤をやっている立場として、いちばん気になったのが CustomerLake です。Databricks がマーケティング領域に進出して出してきた、エージェント型の CDP（顧客データ基盤）でした。Profile Agent が生の顧客データを Customer 360 プロファイルに整え、Campaign Agent が顧客のシグナルから「次の最適なアクション」を決めてチャネルをまたいで実行します。
+Databricks がマーケティング領域に進出して出してきた、エージェント型の CDP（顧客データ基盤）です。Profile Agent が生の顧客データを Customer 360 プロファイルに整え、Campaign Agent が顧客のシグナルから「次の最適なアクション」を決めてチャネルをまたいで実行します。
 
 正直に言うと、これを聞いたとき少しドキッとしました。「コミュニケーションデータから、業務で使われる次のアクションを作る」という方向は、自分たちが目指しているものと重なる部分があるからです。Databricks 公式が同じ問題に乗り出してきたのは、市場があることの証明でもあるし、同時に「お前たちはどこで勝つのか」を問われている気もしました。考え込みながら会場を出たのを覚えています。
 
