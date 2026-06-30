@@ -1,6 +1,6 @@
 ---
 title: "Data + AI Summit 2026 現地参加レポート：ビリヤードボールと4つのCを持ち帰った"
-emoji: "🎱"
+emoji: "🎸"
 type: "idea"
 topics: ["Databricks", "DataAISummit", "AI", "データエンジニアリング", "IVRy"]
 published: false
@@ -22,9 +22,9 @@ https://x.com/ken_3ba/status/2067036954949239180
 
 ## TL;DR
 
-- いちばん言いたいこと: **AI時代の勝者は、派手なAIアプリを作る企業ではなく、AIが正しく働くためのデータと業務の土台を握る企業になる。** データ基盤は「貯めて見る」ものから、**AIをビジネスで使うための意思決定基盤**へ変わってきている。
-- Databricksの通底メッセージは **「AGIはもう来ている。問題は知能ではなく、その周りのContext / Cost / Control / Choiceだ」**。Lakehouseを「エージェント時代のOS」と位置づけ、OLTPからマーケまでUnity Catalog配下に垂直統合してきた。発表の中心はGenie One / Ontology・Unity AI Gateway・Agent Bricks・LTAP / Lakebase・CustomerLakeあたり。
-- そして何より、現地に行く価値が大きい。発表をオンラインで見るのと、現場の熱狂の中で聞くのとでは、記憶への残り方も「帰ったら試すぞ」というモチベーションも全然違う。
+- AI時代に差がつくのは、派手なAIアプリではなく、AIが正しく働くための「データと業務の土台」をどれだけ握れるか。データ基盤は「貯めて見る」ものから、AIがビジネスで意思決定するための基盤へと変わってきている。
+- Databricksの通底メッセージは「AGIはもう来ている。足りないのは知能ではなく、その周りのContext / Cost / Control / Choice（4つのC）だ」。Genieファミリーを軸に、エージェント基盤・データ基盤・アプリ・セキュリティ・マーケまでをUnity Catalog配下に束ね、「Lakehouseはエージェント時代のOS」という像を打ち出していた。
+- 現地に行く価値は大きい。発表はオンラインでも追えるが、現場の熱狂の中で聞くと記憶への残り方もモチベーションも段違いで、ぜひみんな参加して欲しいイベントだった。
 
 ## IVRyとDatabricks
 
