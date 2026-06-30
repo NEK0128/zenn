@@ -26,6 +26,10 @@ https://x.com/ken_3ba/status/2067036954949239180
 - Databricksの通底メッセージは「AGIはもう来ている。足りないのは知能ではなく、その周りのContext / Cost / Control / Choice（4つのC）だ」。Genieファミリーを軸に、エージェント基盤・データ基盤・アプリ・セキュリティ・マーケまでをUnity Catalog配下に束ね、「Lakehouseはエージェント時代のOS」という像を打ち出していた。
 - 現地に行く価値は大きい。発表はオンラインでも追えるが、現場の熱狂の中で聞くと記憶への残り方もモチベーションも段違いで、ぜひみんな参加して欲しいイベントだった。
 
+:::message
+「発表された新機能」は数が多いので、気になる機能だけ選んで読んだり、辞書的に逆引きしたりして使ってもらえれば大丈夫です。記事の最後に「[実際に現地へ行ってみた感想](#実際に現地へ行ってみた感想)」もあるので、そこだけでもぜひ読んでみてください。
+:::
+
 ## IVRyとDatabricks
 
 IVRyは2025年7月、データ・AI活用を加速させるために、Databricksを中心にしてデータ基盤を構築しました。Databricks導入前は、データが増えるにつれて転送コストが膨らみ、データと権限があちこちに散らばるという課題がありました。そのためこれらを解決し、AIをより活用しやすい基盤としてDatabricksをえらんだ、という背景があります。
@@ -85,7 +89,7 @@ Keynoteを貫いていたのは「**AIに足りないのは知能ではなく、
 そのため、データ基盤そのものの役割が変わってきています。これまでは「データを貯めて、人が見に行く」基盤でした。それが今は、**AIがビジネスで安心安全に意思決定する基盤**へと変革しています。まさに今回の発表は、その変化をDatabricksがプラットフォーム全体で表明したものだと受け取りました。
 
 とくに自分が気になったのは、Genie OntologyはContextをそのまま製品にしたものだという点です。Unity AI GatewayはCost、LakewatchはControlの文脈で、それぞれAIのコスト制御や安全性を担保する製品でした。
-そして、800近いセッションのうち半数以上が顧客事例だったそうです。共通して語られていたのは「データ量ではなく、データの意味づけとビジネス部門との連携が成否を分ける」という点でした。どれだけコンテキストを基盤に組み込むかが鍵になってきます。
+そして、800以上のセッションのうち350以上が顧客事例セッションでした。共通して語られていたのは「データ量ではなく、データの意味づけとビジネス部門との連携が成否を分ける」という点でした。どれだけコンテキストを基盤に組み込むかが鍵になってきます。
 
 さらに、全体を貫いていたのが「**Lakehouseはエージェント時代のOS**」という位置づけです。これまで「データウェアハウスの代替」だったDatabricksが、今回は守備範囲を一気に広げてきました。OLTP（Lakebase）・リアルタイム分析（Lakehouse//RT）・エージェント開発（Agent Bricks）・アプリ実行基盤（Apps）・マーケティング（CustomerLake）まで、すべてをUnity Catalogのガバナンス配下に統合してきたのです。「Databricksの中で完結させる」という方針を、本気で進めている印象でした。
 
@@ -106,7 +110,7 @@ https://www.youtube.com/watch?v=sn9My5Pj0mE
 機能ごとに簡単な解説と、自分が感じたことを軽く添えていきます。
 ![今回発表された機能の全体像を示すスライド](/images/dais-2026/overall_2.png)
 
-### Genie Ontology
+### Genie Ontology：データの意味と関係性を自動でナレッジグラフにする
 今回の発表はGenie関連が多く、Databricksのあらゆる機能をGenieを軸にリブランディングしていました。
 その流れの中で、Contextの文脈で発表されたのがGenie Ontologyです。
 Genie Ontologyは、テーブル・クエリ・ダッシュボード・パイプライン・アプリといった社内の資産から、組織の概念や指標、それらの関係性を自動で抽出してナレッジグラフにします。
@@ -123,7 +127,7 @@ Genie Ontologyは、テーブル・クエリ・ダッシュボード・パイプ
 https://www.databricks.com/jp/blog/introducing-genie-one-genie-ontology-and-genie-agents
 
 
-### Genie One
+### Genie One：自然言語でデータに質問できる「AIの同僚」
 Genie Oneは、SlackやTeams、モバイルアプリから自然言語でデータに問い合わせられるサービスです。回答はすべてUnity Catalogのアクセス権限に沿うので、見ていい人にしか見えない形でガバナンスが効きます。MCPサーバー経由で他のエージェントから呼び出せるのもポイントです。
 
 ![Genie One の画面](/images/dais-2026/genie_one.png)
@@ -135,7 +139,7 @@ Keynoteの場でモバイルアプリのリリースが発表されたのには�
 参考記事は以下です。
 https://www.databricks.com/jp/blog/introducing-genie-one-genie-ontology-and-genie-agents
 
-### Genie Agents
+### Genie Agents：業務特化のエージェントを会話で作れる
 Genie Agentsは、特定の業務に特化したエージェントを自分で作れる仕組みです（旧称はGenie Space）。プロンプトを1つ書くだけでエージェントが立ち上がり、人が逐一指示しなくても複数ステップの作業を自律的に進めてくれます。構造化データだけでなく、ドキュメントやファイルといった非構造化の情報源も一緒に扱えるのが特徴です。
 
 汎用的に何でも答えてくれるGenie Oneに対して、Genie Agentsは「この業務専用の担当者」を量産するイメージをもちました。現場ごとに欲しいエージェントを、専門知識がなくても会話から組み立てられるのは手軽で良いなと感じました。
@@ -145,7 +149,7 @@ Genie Agentsは、特定の業務に特化したエージェントを自分で�
 参考記事は以下です。
 https://www.databricks.com/jp/blog/introducing-genie-one-genie-ontology-and-genie-agents
 
-### Genie Code
+### Genie Code：データ／ML開発に特化したコーディングエージェント
 Genie Codeは、データエンジニアリングやMLに特化したコーディングエージェントです。スクリプトやパイプラインの中身を理解した上で、ノートブック・パイプライン・ダッシュボード・MLflowのコードの生成・評価・デプロイまでを自律的にやります。Keynoteでは「社内パイプラインの60%を3か月で生成した」「Genie Ontologyを活用すると汎用エージェント比で2.4倍の成功率」といった話が出ていました。MCP（外部ツール連携）もAgent Skills（ドメイン固有の手順定義）も備えています。
 
 今までローカルのClaude Codeでパイプライン開発や分析をしていたので、これを機に試してみたいなと思いました。
@@ -155,7 +159,7 @@ Genie Codeは、データエンジニアリングやMLに特化したコーデ�
 参考記事は以下です。
 https://www.databricks.com/jp/blog/introducing-genie-code
 
-### Genie ZeroOps
+### Genie ZeroOps：パイプライン障害の検知から修正まで自動化
 Genie ZeroOpsは、ジョブ・パイプライン・テーブル・MLワークロードの運用を自動化するエージェントです。目に見えるエラーが起きる前に、データ品質の指標の変化から異常を検知し、Unity Catalogのリネージをたどって原因を特定します。そのうえでGenie Codeと連携し、GitHubのPRやJiraチケットといった開発の文脈も踏まえて修正コードを生成する、という構成でした。
 
 とくに良いと感じたのが、いきなり本番にデプロイしない設計になっている点です。本番データそのものは複製せず、元データを参照する隔離環境を作ってそこで検証するので、ユーザーの承認なしに本番へ反映されることはありません。
@@ -165,7 +169,7 @@ Genie ZeroOpsは、ジョブ・パイプライン・テーブル・MLワーク�
 参考記事は以下です。
 https://www.databricks.com/jp/blog/introducing-genie-zeroops
 
-### Genie App Builder
+### Genie App Builder：自然言語だけで社内アプリを作れる
 Genie App Builderは、作りたいものを自然な言葉で説明するだけで社内アプリを作れるツールです。リアルタイムでプレビューを見ながら反復して仕上げられて、エンジニアでなくても使えます。Unity Catalogの権限やガバナンスを保ったままアプリを生成してくれるのもポイントです。
 
 ![Genie App Builder の画面](/images/dais-2026/genie_app_bulder.png)
@@ -175,7 +179,7 @@ Genie App Builderは、作りたいものを自然な言葉で説明するだけ
 参考記事は以下です。
 https://www.databricks.com/jp/blog/enabling-governed-vibe-coding-enterprise-apps-databricks
 
-### Agent Bricks
+### Agent Bricks：エージェントを安全に作って運用する開発者向け基盤
 Agent Bricksは、エージェントを構築・デプロイ・運用するための開発者向け機能です。主要モデルにネイティブにアクセスでき、Unity CatalogのMCPサポートでGoogle DriveやJira、Slack、GitHubといった外部ソースにも安全につなげることができます。Unity AI Gatewayでガバナンスとコストを効かせ、Databricks Sandboxの隔離環境で安全に動かせるのも特徴です。
 
 ![Agent Bricks の構成図](/images/dais-2026/agent_bricks.png)
@@ -185,7 +189,7 @@ Agent Bricksは、エージェントを構築・デプロイ・運用するた�
 参考記事は以下です。
 https://www.databricks.com/jp/blog/agent-bricks-dais-2026
 
-### Agent Memory Service
+### Agent Memory Service：エージェントに過去のやり取りや知見を記憶させる
 Agent Memory Serviceは、エージェントに過去のことを覚えさせておく機能です。やり取りの履歴そのものに加えて、そこから学びとった知見や知識もLakebaseにためていけます。覚えた内容は本人だけが使うものとチームで共有するものを分けられて、共有する場合もアクセス権の範囲に収まります。
 
 ![Agent Memory Service の画面](/images/dais-2026/agent_memory_services.png)
@@ -195,7 +199,7 @@ Agent Memory Serviceは、エージェントに過去のことを覚えさせて
 参考記事は以下です。
 https://www.databricks.com/blog/memory-scaling-ai-agents
 
-### Databricks Sandbox
+### Databricks Sandbox：エージェントがコードを安全に試せる隔離環境
 Databricks Sandboxは、エージェントが安全にコードを実行できる隔離環境です。VMで実行環境を隔離したうえで、データへのアクセス範囲もスコープを絞れるので、エージェントが機密データに触れたり本番のテーブルを壊したりするリスクを抑えられます。起動も1秒ほどと速く、サブエージェントや実験用にサッと立てて使い捨てにできます。
 
 ![Databricks Sandbox の画面](/images/dais-2026/agent_sandbox.png)
@@ -205,7 +209,7 @@ Databricks Sandboxは、エージェントが安全にコードを実行でき�
 参考記事は以下です。
 https://docs.databricks.com/aws/en/compute/serverless/sandbox
 
-### Unity AI Gateway
+### Unity AI Gateway：LLMのコストとアクセスを一元管理するゲートウェイ
 Unity AI Gatewayは、LLMのコスト・ルーティング・トレーシングを一箇所に集めて管理する機能です。リクエストごとにトークン数だけでなくDBU換算のコストもUnity Catalogに記録され、どのモデルやプロバイダーにコストがかかっているかまで把握できます。予算はユーザー・ユースケース・ワークスペース・アカウントといった単位で設定でき、上限に近づくとアラートを出してくれます。
 
 AliがKeynoteで何度もAIのコストの大きさに言及していたのが印象的でした。AIを使う機会が増えてきた今、思わぬコスト増で「AI破産」しないよう、そして安全に使えるよう、こうした基盤を早めに整えておくべきだと痛感しました。
@@ -215,7 +219,7 @@ AliがKeynoteで何度もAIのコストの大きさに言及していたのが�
 参考記事は以下です。
 https://www.databricks.com/blog/introducing-ai-spend-controls-unity-ai-gateway
 
-### Omnigent（OSS）
+### Omnigent（OSS）：複数のコーディングエージェントを束ねるメタハーネス
 Omnigentは、複数のコーディングエージェントの上に立つ「メタハーネス」です。skillやclaude.mdなどの設定ファイルをハーネス間で自動同期でき、同じskillをClaude CodeでもCodexでもそのまま動かせます。エージェントの切り替えは1行の変更で済み、ポリシーやコスト管理もOmnigentのレイヤーで一元的に効かせられます。セッション共有によるチームでの共同作業にも対応し、Apache 2.0ライセンスでオープンソース化されました。
 
 ![Omnigent のイメージ](/images/dais-2026/omnigent.png)
@@ -225,7 +229,7 @@ Omnigentは、複数のコーディングエージェントの上に立つ「メ
 参考記事は以下です。
 https://www.databricks.com/jp/blog/introducing-omnigent-meta-harness-combine-control-and-share-your-agents
 
-### LTAP / Lakebase
+### LTAP / Lakebase：OLTPとOLAPをコピーなしで1つに統合
 LTAP（Lake Transactional/Analytical Processing）は、トランザクション処理（OLTP）と分析処理（OLAP）を、レイク上の単一のデータコピーで統合するアーキテクチャです。データを複製せず、ワークロードごとにコンピュートを分離でき、CDCも挟まないので常に最新のデータを扱えます。今まで別々のシステムに分かれていた処理を、ETLなしで1つにまとめられるわけです。
 
 ![LTAP（Lake Transactional / Analytical Processing）。トランザクション用と分析用の2つのコンピュートが、レイク上の1つのデータコピーを共有する](/images/dais-2026/ltap_2.png)
@@ -239,7 +243,7 @@ LTAP（Lake Transactional/Analytical Processing）は、トランザクション
 参考記事は以下です。
 https://www.databricks.com/company/newsroom/press-releases/databricks-launches-ltap-first-lake-transactionalanalytical
 
-### Lakebase Search
+### Lakebase Search：Postgresに全文＋ベクトルのハイブリッド検索を内蔵
 Lakebase Searchは、Lakebaseに組み込まれた、エージェント向けの検索機能です。ベクトル検索と全文検索（BM25）を1つのSQLで組み合わせたハイブリッド検索ができ、別途ベクトルDBを用意する必要がありません。
 
 ![「fast sports car」というクエリに対する、全文検索（lakebase_text・BM25）とベクトル検索（lakebase_vector・ANN）の違い。全文検索は語が一致する文書だけを返し、ベクトル検索は意味の近い文書を返す。ハイブリッド検索は両者をマージする](/images/dais-2026/lakebase_search_keyword_vs_vector.png)
@@ -250,7 +254,7 @@ Lakebase Searchは、Lakebaseに組み込まれた、エージェント向けの
 参考記事は以下です。
 https://www.databricks.com/blog/announcing-lakebase-search-agent-native-retrieval-built-lakebase-postgres
 
-### Lakehouse//RT
+### Lakehouse//RT：大量のクエリをレイクハウス上で直接ミリ秒級に返すリアルタイム分析
 Lakehouse//RTは、Reydenという新エンジンによるリアルタイム分析機能です。レイクハウス上で直接ミリ秒級の応答を返せます。デモでは高い同時実行のもとでも低レイテンシを維持していました。現時点ではBetaで、読み取り専用です。
 
 ![Lakehouse//RT のデモ](/images/dais-2026/lakehouse_rt.png)
@@ -262,7 +266,7 @@ https://x.com/databricks/status/2066933185238257768
 参考記事は以下です。
 https://www.databricks.com/jp/blog/introducing-lakehousert-real-time-performance-unified-lakehouse
 
-### OpenSharing
+### OpenSharing：環境を問わずデータ・モデル・スキルを共有するプロトコル
 OpenSharingは、Delta Sharingの後継となるオープンなデータ共有プロトコルです。テーブルだけでなくAIモデルやエージェントスキルまで、相手の環境を問わず共有でき、Linux Foundationのオープンソースプロジェクトにもなりました。
 
 ![OpenSharing の画面](/images/dais-2026/opensharing.png)
@@ -272,7 +276,7 @@ OpenSharingは、Delta Sharingの後継となるオープンなデータ共有�
 参考記事は以下です。
 https://www.databricks.com/company/newsroom/press-releases/databricks-announces-opensharing
 
-### Lakeflow Designer
+### Lakeflow Designer：ノーコードでETLパイプラインを組む
 Lakeflow Designerは、ノーコードでETLパイプラインを組める機能です。UIと自然言語の両方で構築でき、非データエンジニアでも簡単にパイプラインを作れます。生成されるのは宣言的なパイプラインで、Unity Catalogのガバナンス下に置かれ、バージョン管理や監視も効いた本番対応の状態で出てきます。
 
 ![Lakeflow Designer の画面](/images/dais-2026/lakeflow_designer.png)
@@ -282,7 +286,7 @@ Lakeflow Designerは、ノーコードでETLパイプラインを組める機能
 参考記事は以下です。
 https://www.databricks.com/blog/announcing-lakeflow-designer-no-code-etl
 
-### AI Runtime（Serverless GPU）
+### AI Runtime（Serverless GPU）：GPUをサーバーレスで使えるML学習環境
 AI Runtimeは、ディープラーニングやLLMのトレーニング・ファインチューニングを動かすサーバーレスなトレーニング環境です。クラスターを立てずに、ノートブックから数クリックでA10やH100のGPUを使えます。PyTorchやCUDAも最初から入っているのですぐ学習を始められ、課金も使った分だけ。今回はマルチノードトレーニング対応も発表されました。
 
 ![Serverless GPU の画面](/images/dais-2026/serverless_gpu.png)
@@ -292,7 +296,7 @@ AI Runtimeは、ディープラーニングやLLMのトレーニング・ファ�
 参考記事は以下です。
 https://www.databricks.com/blog/introducing-ai-runtime-scalable-serverless-nvidia-gpus-databricks-training-and-finetuning
 
-### App Spaces
+### App Spaces：複数アプリをまとめてガバナンスする
 App Spacesは、関連する複数のアプリをひとまとめにして統治する機能です。認証・共有範囲・予算・外部ネットワークアクセスといったポリシーをスペース単位で定義しておけば、その中のアプリすべてに適用され、利用状況やコストもまとめて追跡できます。アプリが増えても1つずつ設定する手間がなくなります。
 
 ![App Spacesのスライド。Workspace AdminがSpace-level Policies（ワークスペース/Unity Catalog・認証・共有・予算・外部ネットワーク）を定義し、その配下でApp BuilderがデプロイしApp Userが使う。利点はMulti-app policies・Governed sharing・Scalable operationsの3つ](/images/dais-2026/app_spaces.png)
@@ -303,7 +307,7 @@ App Spacesは、関連する複数のアプリをひとまとめにして統治�
 参考記事は以下です。
 https://www.databricks.com/blog/enabling-governed-vibe-coding-enterprise-apps-databricks
 
-### Serverless Micro Apps
+### Serverless Micro Apps：アプリを必要なときだけ動かす
 Serverless Micro Appsは、小さなアプリを必要なときだけ立ち上げて安価に動かせる実行環境です。従来のDatabricks Appsはずっと起動しっぱなしでコストがかかっていましたが、Micro Appsはアイドル時にゼロまでスケールダウンするので、コストを最適化できます。
 
 ![Serverless Micro Apps のイメージ](/images/dais-2026/sercerless_micro_apps.png)
@@ -313,7 +317,7 @@ Serverless Micro Appsは、小さなアプリを必要なときだけ立ち上�
 参考記事は以下です。
 https://www.databricks.com/blog/enabling-governed-vibe-coding-enterprise-apps-databricks
 
-### Lakewatch
+### Lakewatch：エージェントが脅威検知から対応まで回すSIEM
 Lakewatchは、エージェント型のSIEMです。セキュリティ・IT・業務のデータをUnity Catalogの上に集め、防御側のエージェントが脅威の検知から対応までを自動化します。Genieで脅威の調査を自然言語で回せて、既存SIEMの弱点だったデータ量・コスト（最大80%削減）・非構造化データへの対応も解消します。Pantherの買収と合わせて発表され、「セキュリティレイクハウス」という方向を打ち出していました。
 
 ![Lakewatch のイメージ](/images/dais-2026/lakewatch.png)
@@ -323,7 +327,7 @@ AIが攻撃側にも使われて攻撃の速度と規模が上がっている今
 参考記事は以下です。
 https://www.databricks.com/blog/databricks-announces-lakewatch-new-agentic-siem
 
-### CustomerLake
+### CustomerLake：エージェント型のCustomer Data Platform（CDP）
 CustomerLakeは、Databricksが出したCustomer Data Platform（CDP）です。CDP自体は以前から各社がリリースしていて、色々なチャネルに散らばった顧客データを1つに集め、マーケティング施策に使えるようにする基盤のことです。CustomerLakeは、そこにエージェントを組み込んだのが新しいところです。
 
 機能をもう少し具体的に見ると、Profile Agentが生の顧客データを一人ひとりのプロファイルに整え、Campaign Agentがその人のシグナルから「次に取るべきアクション」を決めて、メールや広告などチャネルをまたいで実行します。今までのように「セグメントを切ってキャンペーンを打つ」のではなく、個人単位で1:1の判断を回し続けるのが特徴です。
