@@ -1,5 +1,5 @@
 ---
-title: "Data + AI Summit 2026 現地参加レポート：ビリヤードボールと4つのCを持ち帰った"
+title: "Data + AI Summit 2026 現地参加レポート：データ基盤は「AIがビジネスで意思決定する基盤」へ"
 emoji: "🎸"
 type: "idea"
 topics: ["Databricks", "DataAISummit", "AI", "データエンジニアリング", "IVRy"]
