@@ -237,7 +237,7 @@ LTAP（Lake Transactional/Analytical Processing）は、トランザクション
 
 そのOLTP側を担うのが、Postgres互換のサーバーレスDB、Lakebaseです。利用しないときはゼロまで縮むオートスケール、別リージョン・別クラウドへフェイルオーバーできるマルチクラウド対応、そして500ミリ秒以下で本番データのブランチを切れるのが特徴です。
 
-本番のコピーをブランチとして切って試し、問題なければ反映する、という開発体験がDB側でも得られるのは地味にうれしいポイントでした。ただ、Lakebaseはまだ日本リージョンに来ていません。個人的に登場をずっと待ち望んでいる機能です。
+本番のコピーをブランチとして切って試し、問題なければ反映する、という開発体験がDB側でも得られるのは地味にうれしいポイントでした。個人的にずっと待ち望んでいた機能で、なんとこの記事を書いている今日、日本リージョンでも使えるようになりました。さっそく触ってみようと思います。
 
 参考記事は以下です。
 https://www.databricks.com/company/newsroom/press-releases/databricks-launches-ltap-first-lake-transactionalanalytical
