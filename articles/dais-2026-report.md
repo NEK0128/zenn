@@ -183,7 +183,7 @@ Agent Bricksは、エージェントを構築・デプロイ・運用するた�
 
 ![Agent Bricks の構成図](/images/dais-2026/agent_bricks.png)
 
-社内でエージェントを増やしていくなら、こういう土台に乗せて作るほうがラクになってくるだろうなと感じました。ただ、Agent Bricksはまだ日本リージョンには来ていないので、早く来て欲しいですね！
+社内でエージェントを増やしていくなら、こういう土台に乗せて作るほうがラクになってくるだろうなと感じました。Agent Bricksは東京リージョンでも使えます。Cross-Geo Routingを有効にする必要はありますが、さっそく試してみたいですね。
 
 参考記事は以下です。
 https://www.databricks.com/jp/blog/agent-bricks-dais-2026
