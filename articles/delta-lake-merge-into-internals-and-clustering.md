@@ -138,12 +138,14 @@ flowchart TB
 
 `findTouchedFiles`（`ClassicMergeExecutor.scala`）は、`WHEN NOT MATCHED BY SOURCE`句の有無でジョイン種別を切り替えます。
 
-| 条件 | ジョイン種別 |
-|---|---|
-| `WHEN NOT MATCHED BY SOURCE`句がある | `Right Outer` |
-| `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` |
+| 条件 | ジョイン種別 | Z-orderによる事前スキッピング |
+|---|---|---|
+| `WHEN NOT MATCHED BY SOURCE`句がある | `Right Outer` | 効かない（全ファイルが対象） |
+| `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` | 効く（`ON`句のターゲット単独条件で絞り込み） |
 
-`NOT MATCHED BY SOURCE`はターゲット側にしか存在しない行を扱う句なので、それを拾うためにターゲット側を主体にしたOuter Joinが必要になります。
+`sourceDF.join(targetDF, condition, joinType)`という書き方をしているので、`targetDF`（ターゲット）が`Right`側です。`Right Outer Join`は「右側（ターゲット）の行を、ソース側にマッチするかどうかに関わらず必ず結果に残す」ジョインです。`NOT MATCHED BY SOURCE`はまさに「ソースにマッチしなかったターゲット行」を処理対象にする句なので、`Inner`のままだとそのターゲット行自体がジョイン結果から消えてしまい、処理対象を見つけられません。だから`Right Outer`にして、ターゲット側の全行を取りこぼさないようにしています。
+
+そして、このジョイン種別の分岐は、後述する事前のファイルスキッピングが効くかどうかにも直結しています。
 
 実際のコードでは、ジョインの前に「事前のファイル絞り込み」が入っています。ここが検証2で見た「`ON`句に条件を1つ足すと90ファイル→1ファイルに減る」現象の正体です。
 
