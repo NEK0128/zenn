@@ -69,6 +69,29 @@ MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table_name [target_alias]
 
 Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob/v3.2.0/spark/src/main/scala/org/apache/spark/sql/delta/commands/MergeIntoCommand.scala)）を見ると、`MERGE INTO`は大きく2つのフェーズで構成されていることが分かります。
 
+## 読む前に：こんがらがりやすい用語の対応
+
+コードを読み進める前に、混同しやすい用語の対応関係を先に整理しておきます。
+
+| 用語 | 指すもの |
+|---|---|
+| `source` | `USING`句に書いたテーブル（今回のバッチ・差分） |
+| `target` | `MERGE INTO`の対象テーブル（更新される側） |
+| `left` | `sourceDF.join(targetDF, ...)`という書き方の左側 = **source** |
+| `right` | 同上の右側 = **target** |
+
+内部のコードは一貫して`sourceDF.join(targetDF, condition, joinType)`という書き方をしています。`.join()`を呼ぶ側（ドットの前）が`left`、引数に渡す側が`right`です。「`s`ourceは`l`eft、`t`argetは`r`ight」とアルファベットの並びで覚えると混同しにくくなります。
+
+`WHEN`句の名前も紛らわしいので、あわせて整理します。
+
+| 句 | 直訳のニュアンス | 実際にどの行を指すか | 主なアクション |
+|---|---|---|---|
+| `WHEN MATCHED` | マッチする | sourceとtargetの**両方**に存在する行 | UPDATE / DELETE |
+| `WHEN NOT MATCHED`（`BY SOURCE`なし） | （targetを主語に）マッチしない | **source**にしかない行（新しく届いた行） | INSERT |
+| `WHEN NOT MATCHED BY SOURCE` | **source**によってマッチされない | **target**にしかない行（もう届かなくなった行） | UPDATE / DELETE |
+
+`NOT MATCHED BY SOURCE`は「ソースによってマッチされない」という意味で、主語はtargetの行です。`BY SOURCE`が付いている方が「sourceを主語にした視点」で、指している行は逆に**target側**にしかない行になる、という点が直感に反して混同しやすいポイントです。「`NOT MATCHED`（無印）はINSERT用の新規行、`BY SOURCE`が付いたらtargetのお片付け用」と覚えておくと区別しやすくなります。
+
 1. **フェーズ1: 対象ファイルの特定（`findTouchedFiles`）**: ソーステーブルとターゲットテーブルをマージキーでジョインし、更新・削除の対象になり得る**ファイルを特定する**
 2. **フェーズ2: 書き込み内容の計算（`writeAllChanges` / `writeDVs`）**: ソーステーブルと、フェーズ1で見つかった対象ファイルを再度ジョインし、**実際に書き込む内容を計算する**
 
@@ -174,6 +197,60 @@ val joinToFindTouchedFiles =
 
 `notMatchedBySourceClauses.isEmpty`のときだけ、`getTargetOnlyPredicates(spark)`（`ON`句のうちターゲット単独で評価できる条件、例えば`t.event_date = DATE'2026-01-05'`）を使って`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングがここで行われます。`NOT MATCHED BY SOURCE`句があると、ターゲット側だけの行（ソースにマッチしない行）も処理対象に含める必要があるため、事前にファイルを除外できず`Literal.TrueLiteral`（全ファイル対象）になります。`targetPlan`はこの`dataSkippedFiles`で絞り込まれた後のファイルだけを読むように組まれているので、ジョインそのものよりも前の「事前の絞り込み」の段階で、対象ファイル数がほぼ決まってしまうということです。
 
+### 具体例で見るフェーズ1
+
+target（既存2行）とsource（今回のバッチ2行）で、以下のデータを例にします。
+
+| target.user_id | status |
+|---|---|
+| 1 | active |
+| 3 | active |
+
+| source.user_id | status |
+|---|---|
+| 1 | updated |
+| 2 | new |
+
+`user_id=1`はtarget・source両方に存在（MATCHED）、`user_id=2`はsourceにしかない（NOT MATCHED）、`user_id=3`はtargetにしかない（NOT MATCHED BY SOURCE）行です。
+
+**`WHEN NOT MATCHED BY SOURCE`句がない場合（`joinType = inner`）**
+
+```sql
+WHEN MATCHED THEN UPDATE ...
+WHEN NOT MATCHED THEN INSERT ...
+```
+
+| user_id | ジョイン結果 |
+|---|---|
+| 1 | 残る（MATCHED、対象ファイルとして記録） |
+| 2 | 結果に出ない（後述する特殊ケースで別処理） |
+| 3 | 結果に出ない（`NOT MATCHED BY SOURCE`句がないので処理不要） |
+
+`Inner`なので、sourceにマッチしなかった`user_id=3`はそもそもジョイン結果に現れません。「処理しなくていい行」を最初から持たずに済みます。
+
+**`WHEN NOT MATCHED BY SOURCE`句がある場合（`joinType = right_outer`）**
+
+```sql
+WHEN MATCHED THEN UPDATE ...
+WHEN NOT MATCHED BY SOURCE THEN UPDATE SET status = 'inactive'
+```
+
+| user_id | ジョイン結果 |
+|---|---|
+| 1 | 残る（MATCHED、対象ファイルとして記録） |
+| 3 | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL、それでも対象ファイルとして記録） |
+
+`Right Outer`なので、targetの全行（`user_id=3`含む）を取りこぼしません。ここで`NOT MATCHED BY SOURCE`句を処理対象にできる代わり、事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
+
+## フェーズ2：DV無効とDV有効で何が根本的に違うか
+
+フェーズ2のジョイン種別に入る前に、DV（Deletion Vectors）の有無で書き込み方がどう変わるかを整理します。Deltaのファイルは一度書いたら中身を直接書き換えられません。1行だけ`UPDATE`したいときも、選択肢は次の2つしかありません。
+
+- **DV無効（Copy-on-Write）**: 対象ファイルを丸ごと新しいファイルとして書き直す。変更したい行だけでなく、そのファイルに入っている変更しない行も全部一緒にコピーして新ファイルに書く。元ファイルは削除
+- **DV有効**: 元のファイルはそのまま残す。変更した行だけを新しい小さなファイルに書き、元ファイルには「この行はもう無効」という印（Deletion Vector）を別ファイルとして追加する。公式ドキュメントはこれを「soft-delete」と呼んでいます
+
+未変更行を「新ファイルにコピーする対象」として持つ必要があるかどうかが、そのままジョイン種別の広さに直結します。DV無効は未変更行もジョイン結果に含める必要があるためジョインが広め（`Right Outer`/`Full Outer`）になり、DV有効は変更対象の行だけに絞れるため狭いジョイン（`Inner`が使えるケースもある）で済みます。
+
 ## フェーズ2のジョイン種別
 
 **DVが無効の場合**
@@ -185,6 +262,23 @@ val joinToFindTouchedFiles =
 
 DV無効時は更新対象外の行も含めてジョイン結果をそのまま書き込む必要があるため、`Inner`にはなりません。`WHEN MATCHED`句しかない場合でも、ターゲット側の行を漏れなく出力するために`Right Outer`が使われます。ジョインした結果をそのままターゲットテーブルに書き込む、つまり該当ファイルを丸ごと書き直すCopy-on-Write方式です。
 
+### 具体例で見るフェーズ2（DV無効）
+
+先ほどと同じtarget（`user_id=1,3`）・source（`user_id=1,2`）で見ます。
+
+**`WHEN MATCHED`句しかない場合（`joinType = rightOuter`）**
+
+```sql
+WHEN MATCHED THEN UPDATE SET status = s.status
+```
+
+| user_id | ジョイン結果 | 最終的な出力 |
+|---|---|---|
+| 1 | 残る（MATCHED） | `status='updated'` |
+| 3 | 残る（未変更） | 該当する`WHEN`句がないのでそのままコピー |
+
+ポイントは、`joinType`が決めているのは「どの行がジョイン結果に残るか」だけで、残った行に何のアクションを適用するかは別のロジック（`SOURCE_ROW_PRESENT_COL`/`TARGET_ROW_PRESENT_COL`のNULL判定）で決まるという点です。`user_id=1`はInnerでもRight Outerでも同じように`UPDATE`が適用されます。`Right Outer`にしたことで増えるのは、未変更行`user_id=3`までジョイン結果に含まれることだけです。この未変更行が「該当する`WHEN`句がないのでそのままコピー」としてまとめて書き直されるのが、DV無効時に「ファイル全体を書き直す」動作の正体です。
+
 **DVが有効の場合**
 
 | 条件 | ジョイン種別 |
@@ -195,6 +289,69 @@ DV無効時は更新対象外の行も含めてジョイン結果をそのまま
 | それ以外（全ての節がある） | `Full Outer` |
 
 書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイル（該当ファイル内のどの行が無効化されたかを記録するサイドカーファイル）に書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
+
+### 具体例で見るフェーズ2（DV有効）
+
+同じtarget・sourceで、DVが有効な場合の4パターンを見ます。
+
+**`isMatchedOnly`（`WHEN MATCHED`句のみ、`joinType = inner`）**
+
+```sql
+WHEN MATCHED THEN UPDATE SET status = s.status
+```
+
+| user_id | ジョイン結果 | 出力 |
+|---|---|---|
+| 1 | 残る（MATCHED） | `status='updated'`（新規の小さなファイルへ） |
+| 3 | 結果に出ない | 一切触らない。既存ファイルはそのまま、DVも立たない |
+
+`Inner`なので、変更対象の`user_id=1`しかジョイン結果に出てきません。未変更の`user_id=3`はそもそも結果に含まれず、既存ファイルもDVも触られません。「3はそのまま放置、1だけ直す」がそのまま体現された形です。
+
+**`WHEN NOT MATCHED BY SOURCE`句がない場合（`joinType = leftOuter`）**
+
+```sql
+WHEN MATCHED THEN UPDATE ...
+WHEN NOT MATCHED THEN INSERT ...
+```
+
+| user_id | ジョイン結果 | 出力 |
+|---|---|---|
+| 1 | 残る（MATCHED） | `UPDATE`の結果 |
+| 2 | 残る（NOT MATCHED） | `INSERT`の結果（新規行） |
+| 3 | 結果に出ない | `NOT MATCHED BY SOURCE`句がないので処理不要 |
+
+`Left Outer`はsource側（left）を主体に、source全行を残すジョインです。sourceにない`user_id=3`はそもそも処理対象でないため、Innerの時点で落ちます。
+
+**`WHEN NOT MATCHED`句がない場合（`joinType = rightOuter`）**
+
+```sql
+WHEN MATCHED THEN UPDATE ...
+WHEN NOT MATCHED BY SOURCE THEN UPDATE SET status = 'inactive'
+```
+
+| user_id | ジョイン結果 | 出力 |
+|---|---|---|
+| 1 | 残る（MATCHED） | `UPDATE`の結果 |
+| 3 | 残る（NOT MATCHED BY SOURCE） | `status='inactive'` |
+| 2 | 結果に出ない | `NOT MATCHED`句がないのでINSERTしない |
+
+`Right Outer`はtarget側（right）を主体に、target全行を残すジョインです。sourceにしかない`user_id=2`はINSERTしないので不要、Innerの時点で落ちます。
+
+**全種類の`WHEN`句がある場合（`joinType = fullOuter`）**
+
+```sql
+WHEN MATCHED THEN UPDATE ...
+WHEN NOT MATCHED THEN INSERT ...
+WHEN NOT MATCHED BY SOURCE THEN UPDATE SET status = 'inactive'
+```
+
+| user_id | ジョイン結果 | 出力 |
+|---|---|---|
+| 1 | 残る（MATCHED） | `UPDATE`の結果 |
+| 2 | 残る（NOT MATCHED） | `INSERT`の結果（新規行） |
+| 3 | 残る（NOT MATCHED BY SOURCE） | `status='inactive'` |
+
+3パターン全部が処理対象を持つため、`Full Outer`で3行すべてがジョイン結果に残ります。
 
 ## 特殊ケース：Insert-only MERGE
 
@@ -359,5 +516,6 @@ WHEN MATCHED THEN UPDATE SET t.status = s.status, t.updated_at = s.updated_at
 - [Faster MERGE Performance With Low-Shuffle Merge and Photon - Databricks Blog](https://www.databricks.com/blog/faster-merge-performance-low-shuffle-merge-and-photon)
 - [Low shuffle merge on Databricks](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)
 - [Deletion vectors in Databricks](https://docs.databricks.com/aws/en/delta/deletion-vectors)
+- [What are deletion vectors? - Delta Lake](https://docs.delta.io/latest/delta-deletion-vectors.html)
 - [MERGE INTO - Databricks SQL言語リファレンス](https://docs.databricks.com/en/sql/language-manual/delta-merge-into.html)
 - [Concurrency control - Delta Lake](https://docs.delta.io/latest/concurrency-control.html)
