@@ -7,16 +7,21 @@ published: false
 publication_name: "ivry"
 ---
 
-こんにちは、IVRyでデータエンジニアとして働いている松田健司（[@ken_3ba](https://x.com/ken_3ba)）です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
+こんにちは、IVRyでデータエンジニアとして働いている松田健司（[@ken_3ba](https://x.com/ken_3ba)）です。
+趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
 
-先日、弘前市で開催された「あおもりビリヤードチャリティトーナメント」に参加してきました。51名が参加する大会で、決勝まで勝ち上がったものの、最後は一歩及ばず準優勝でした。悔しい結果でしたが、良い経験になりました。
+先日、青森で開催された「あおもりビリヤードチャリティトーナメント」に参加してきました。
+51名が参加する大会で、決勝まで勝ち上がったものの、最後は一歩及ばず準優勝でした。
 
 ![あおもりビリヤードチャリティトーナメントの表彰式。左が筆者で準優勝の賞状を手にしている](/images/delta-lake-merge-into-internals-and-clustering/tournament.png)
 *あおもりビリヤードチャリティトーナメントの表彰式にて。左が筆者です*
 
-ビリヤードの小話はここまでにして、本題のDelta Lakeの`MERGE INTO`についてお話しします。
+ビリヤードの小話はここまでにして、今回はDelta Lakeの`MERGE INTO`についてお話しします。
 
-`MERGE INTO`はDelta Lakeを使ううえで避けて通れない構文ですが、内部で何が起きているかを意識せずに使うと、思ったよりコストが高い・思ったより速くならないといった壁にぶつかります。本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部ジョイン戦略を整理し、さらにDatabricks SQLウェアハウス上でサンプルテーブルを作って実際に`DESCRIBE HISTORY`のoperationMetricsを取得し、パーティション+Z-orderとLiquid Clusteringで挙動がどう変わるかを検証しました。
+Databricksを利用していく上で差分更新をしたいといったときに`MERGE INTO`はDelta Lakeを使ううえで避けて通れない構文です。
+簡易に利用できるのですが、内部で何が起きているかを意識せずに使うと、思ったより処理に時間がかかったり、コストがかかったりするといった壁にぶつかります。そして、中の構文は結構複雑だったりして、理解するのはなかなか大変です。
+
+本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部ジョイン戦略について整理します。
 
 # TL;DR
 
@@ -26,9 +31,20 @@ publication_name: "ivry"
 - 同じ条件でLiquid Clusteringテーブルに対してMERGEすると、既存ファイルは1つも書き直されず、Deletion Vectorで該当行だけ無効化された。パーティション+Z-orderのテーブルでは同じDV有効設定でもDVが使われず全書き直しになっており、Databricks公式ドキュメントの「Low shuffle mergeによるレイアウト保持はbest-effort（保証ではない）」という記述と符合する結果だった。
 - 検証に使ったのはあくまでDatabricks SQLウェアハウス経由の`DESCRIBE HISTORY`統計であり、Spark UIのクエリDAGでジョイン種別そのもの（Inner/Left Antiなど）を直接見たわけではない。
 
-# MERGE INTOの構文とWHEN句
+# MERGE INTOについて
 
-Databricks SQL / Delta Lakeの`MERGE INTO`は次の構文を取ります。
+`MERGE INTO`は、ソース側のデータをキーで突き合わせながらターゲットテーブルを更新する構文です。代表的な使いどころは以下のようなケースです。
+
+- **Upsert**: ソースのキーがターゲットに存在すれば更新、存在しなければ挿入する基本パターン
+- **重複排除を伴う取り込み**: ログデータなどをバッチ取り込みする際、既に取り込み済みのレコードを重複挿入しないようにする（ソース側自体の重複排除は別途必要）
+- **CDC・SCDの反映**: 変更データキャプチャ（CDC）で届いた差分を、SCD Type 1（上書き）やType 2（履歴保持）としてターゲットテーブルに反映する
+- **時間範囲を絞ったインクリメンタル同期**: 「直近N日分のソースレコードだけを対象に、マッチ分は更新・新規は挿入・対象期間内で消えたものは削除」という同期パターン
+
+原子性については、`MERGE INTO`固有の保証というより、Delta Lakeのトランザクション機構に支えられています。Delta Lakeは[Optimistic Concurrency Control（楽観的同時実行制御）](https://docs.delta.io/latest/concurrency-control.html)を採用しており、書き込みは「読み込み→変更内容をステージング→他の並行コミットと競合していないか検証してからコミット」という流れで行われます。検証に失敗すると`ConcurrentAppendException`などの例外が発生してコミット全体が失敗し、テーブルの状態は変更されません。公式ドキュメントに「MERGEの途中経過が部分的にテーブルへ反映される」という明示的な記述はありませんでしたが、このコミット機構から推測する限り、検証を通らない限りテーブルの状態は変わらない、つまり失敗時は全体が未適用のままになると考えてよさそうです。
+
+なお公式ドキュメントは、`MERGE`が他の同時書き込みと競合しやすい操作であることにも触れています。`ON`句や`matched_condition`でパーティション列などの絞り込み条件を明示しないと、テーブル全体をスキャンする形になり、他のパーティションを更新する並行処理とも競合しやすくなるとのことです。後述する「絞り込み条件を足すとファイルスキップが効く」という話は、パフォーマンスだけでなく同時実行時の競合を避けるという観点でも意味を持ちます。
+
+Databricks SQL / Delta Lakeの`MERGE INTO`は次の構文になります。
 
 ```sql
 MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table_name [target_alias]
@@ -39,6 +55,8 @@ MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table_name [target_alias]
     WHEN NOT MATCHED BY SOURCE [ AND not_matched_by_source_condition ] THEN not_matched_by_source_action } [...]
 ```
 
+`target_table_name`が更新される側のDeltaテーブル（**ターゲットテーブル**）、`USING`句に指定するのが更新内容の元になるテーブル（**ソーステーブル**）です。ソーステーブルはDeltaテーブルである必要はなく、CSVから読み込んだDataFrameやCTE、別形式のテーブルなど、Sparkでクエリできるものであれば何でも指定できます。CDCパイプラインであれば「今回のバッチで届いた変更差分」、Upsertバッチであれば「最新の状態を持つ外部テーブル」がソーステーブルにあたり、`ON merge_condition`で指定したキーでターゲットテーブルの各行と突き合わせて、`WHEN`句に応じた`UPDATE`/`DELETE`/`INSERT`を行います。
+
 3種類の`WHEN`句があり、どれを書くか・書かないかの組み合わせによってMERGEの意味、そして内部で使われるジョイン戦略が変わります。
 
 | 句 | 意味 |
@@ -47,12 +65,50 @@ MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table_name [target_alias]
 | `WHEN NOT MATCHED [BY TARGET]` | ソースにしか存在しない行に対する`INSERT` |
 | `WHEN NOT MATCHED BY SOURCE` | ターゲットにしか存在しない行に対する`UPDATE`/`DELETE` |
 
-# OSSコードで見るMERGE INTOの内部動作
+# MERGE INTOの内部動作の詳細
 
 Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob/v3.2.0/spark/src/main/scala/org/apache/spark/sql/delta/commands/MergeIntoCommand.scala)）を見ると、`MERGE INTO`は大きく2つのフェーズで構成されていることが分かります。
 
-1. **フェーズ1（`findTouchedFiles`）**: ソーステーブルとターゲットテーブルをマージキーでジョインし、更新・削除の対象になり得るファイルを特定する
-2. **フェーズ2（`writeAllChanges` / `writeInsertsOnlyWhenNoMatchedClauses`）**: ソーステーブルと、フェーズ1で見つかった対象ファイルを再度ジョインし、実際に書き込む内容を計算する
+1. **フェーズ1: 対象ファイルの特定（`findTouchedFiles`）**: ソーステーブルとターゲットテーブルをマージキーでジョインし、更新・削除の対象になり得る**ファイルを特定する**
+2. **フェーズ2: 書き込み内容の計算（`writeAllChanges` / `writeDVs`）**: ソーステーブルと、フェーズ1で見つかった対象ファイルを再度ジョインし、**実際に書き込む内容を計算する**
+
+`MergeIntoCommand.scala`（v3.2.0、119行目付近）を単純化すると、全体の制御フローはおおよそ次のようになっています。
+
+```scala
+// フェーズ1: 対象ファイルの特定
+val (filesToRewrite, deduplicateCDFDeletes) = findTouchedFiles(spark, deltaTxn)
+
+if (filesToRewrite.nonEmpty) {
+  val shouldWriteDeletionVectors =
+    shouldWritePersistentDeletionVectors(spark, deltaTxn)
+
+  if (shouldWriteDeletionVectors) {
+    // フェーズ2 (DV有効): 変更行だけを新規ファイルに書き込む
+    val newWrittenFiles = writeAllChanges(
+      spark, deltaTxn, filesToRewrite,
+      deduplicateCDFDeletes, writeUnmodifiedRows = false)
+
+    // 既存ファイル側にDeletion Vectorを書き込む
+    val dvActions = writeDVs(spark, deltaTxn, filesToRewrite)
+
+    newWrittenFiles ++ dvActions
+  } else {
+    // フェーズ2 (DV無効): 未変更行も含めて丸ごと書き直す
+    val newWrittenFiles = writeAllChanges(
+      spark, deltaTxn, filesToRewrite,
+      deduplicateCDFDeletes, writeUnmodifiedRows = true)
+
+    newWrittenFiles ++ filesToRewrite.map(_.remove)
+  }
+} else {
+  // 対象ファイルなし = Insert-onlyの高速パス
+  writeOnlyInserts(spark, deltaTxn, ...)
+}
+```
+
+（実コードを単純化した抜粋です。エラーハンドリングやメトリクス収集など、この記事のテーマに関係しない処理は省略しています）
+
+`writeAllChanges`の`writeUnmodifiedRows`引数に、DVが有効か無効かがそのまま渡っているのが分かります。DV有効なら`false`（未変更行は書かない）、無効なら`true`（丸ごと書き直す）です。DV有効時のみ、`writeAllChanges`とは別に`writeDVs`が呼ばれて既存ファイル側にDeletion Vectorが書き込まれます。
 
 ```mermaid
 flowchart TB
@@ -76,7 +132,7 @@ flowchart TB
     P1 --> P2
 ```
 
-フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピング（min/max統計によるプルーニング）が効くかどうかが、パフォーマンスを大きく左右します。
+フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピングが効くかどうかが、パフォーマンスを大きく左右します。
 
 ## フェーズ1のジョイン種別
 
@@ -95,10 +151,10 @@ flowchart TB
 
 | 条件 | ジョイン種別 |
 |---|---|
-| `WHEN MATCHED`句しかない | `Inner` |
+| `WHEN MATCHED`句しかない | `Right Outer` |
 | それ以外（`NOT MATCHED`や`NOT MATCHED BY SOURCE`を含む） | `Full Outer` |
 
-ジョインした結果をそのままターゲットテーブルに書き込みます。つまり該当ファイルを丸ごと書き直すCopy-on-Write方式です。
+DV無効時は更新対象外の行も含めてジョイン結果をそのまま書き込む必要があるため、`Inner`にはなりません。`WHEN MATCHED`句しかない場合でも、ターゲット側の行を漏れなく出力するために`Right Outer`が使われます。ジョインした結果をそのままターゲットテーブルに書き込む、つまり該当ファイルを丸ごと書き直すCopy-on-Write方式です。
 
 **DVが有効の場合**
 
@@ -275,3 +331,4 @@ WHEN MATCHED THEN UPDATE SET t.status = s.status, t.updated_at = s.updated_at
 - [Low shuffle merge on Databricks](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)
 - [Deletion vectors in Databricks](https://docs.databricks.com/aws/en/delta/deletion-vectors)
 - [MERGE INTO - Databricks SQL言語リファレンス](https://docs.databricks.com/en/sql/language-manual/delta-merge-into.html)
+- [Concurrency control - Delta Lake](https://docs.delta.io/latest/concurrency-control.html)
