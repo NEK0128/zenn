@@ -148,11 +148,12 @@ flowchart TB
 実際のコードでは、ジョインの前に「事前のファイル絞り込み」が入っています。ここが検証2で見た「`ON`句に条件を1つ足すと90ファイル→1ファイルに減る」現象の正体です。
 
 ```scala
-// NOT MATCHED BY SOURCE句を扱わなくてよいなら、事前にファイルを絞り込める
 val dataSkippedFiles =
   if (notMatchedBySourceClauses.isEmpty) {
+    // ON句のうちターゲット単独で判定できる条件で、Z-order統計を使って絞り込む
     deltaTxn.filterFiles(getTargetOnlyPredicates(spark), keepNumRecords = true)
   } else {
+    // 常にtrueの条件を渡す = 実質フィルタなし。全ファイルが対象のまま残る
     deltaTxn.filterFiles(filters = Seq(Literal.TrueLiteral), keepNumRecords = true)
   }
 
