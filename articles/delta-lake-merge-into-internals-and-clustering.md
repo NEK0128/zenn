@@ -87,6 +87,32 @@ Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob
 1. **フェーズ1: 対象ファイルの特定（`findTouchedFiles`）**: ソーステーブルとターゲットテーブルをマージキーでジョインし、更新・削除の対象になり得る**ファイルを特定する**
 2. **フェーズ2: 書き込み内容の計算（`writeAllChanges` / `writeDVs`）**: ソーステーブルと、フェーズ1で見つかった対象ファイルを再度ジョインし、**実際に書き込む内容を計算する**
 
+フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピングが効くかどうかが、パフォーマンスを大きく左右します。全体像は次のようになります。
+
+```mermaid
+flowchart TB
+    subgraph P1["フェーズ1: 対象ファイルの特定 (findTouchedFiles)"]
+        direction LR
+        S1["ソーステーブル\n(left)"]
+        T1["ターゲットテーブル\n(right)"]
+        S1 --> J1{{"Join #1\n(merge_condition)"}}
+        T1 --> J1
+        J1 --> F1["対象ファイル一覧\n(更新・削除され得るファイルのみ)"]
+    end
+
+    subgraph P2["フェーズ2: 書き込み内容の計算 (writeAllChanges)"]
+        direction LR
+        S2["ソーステーブル\n(left)"]
+        F1 --> J2{{"Join #2\n(merge_condition)"}}
+        S2 --> J2
+        J2 --> W["ターゲットテーブルへ書き込み"]
+    end
+
+    P1 --> P2
+```
+
+<!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする。この後の「フェーズ1のジョイン種別」「フェーズ2のジョイン種別」の各見出し直下にも、それぞれのフェーズだけを抜き出した図を追加するとよい -->
+
 実際のコード（`MergeIntoCommand.scala`）を単純化すると、全体の制御フローはおおよそ次のようになっています。
 
 ```scala
@@ -124,32 +150,6 @@ if (filesToRewrite.nonEmpty) {
 （実コードを単純化した抜粋です。エラーハンドリングやメトリクス収集など、この記事のテーマに関係しない処理は省略しています）
 
 `writeAllChanges`の`writeUnmodifiedRows`引数に、DVが有効か無効かがそのまま渡っているのが分かります。DV有効なら`false`（未変更行は書かない）、無効なら`true`（丸ごと書き直す）です。DV有効時のみ、`writeAllChanges`とは別に`writeDVs`が呼ばれて既存ファイル側にDeletion Vectorが書き込まれます。
-
-フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピングが効くかどうかが、パフォーマンスを大きく左右します。全体像は次のようになります。
-
-```mermaid
-flowchart TB
-    subgraph P1["フェーズ1: 対象ファイルの特定 (findTouchedFiles)"]
-        direction LR
-        S1["ソーステーブル\n(left)"]
-        T1["ターゲットテーブル\n(right)"]
-        S1 --> J1{{"Join #1\n(merge_condition)"}}
-        T1 --> J1
-        J1 --> F1["対象ファイル一覧\n(更新・削除され得るファイルのみ)"]
-    end
-
-    subgraph P2["フェーズ2: 書き込み内容の計算 (writeAllChanges)"]
-        direction LR
-        S2["ソーステーブル\n(left)"]
-        F1 --> J2{{"Join #2\n(merge_condition)"}}
-        S2 --> J2
-        J2 --> W["ターゲットテーブルへ書き込み"]
-    end
-
-    P1 --> P2
-```
-
-<!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする。この後の「フェーズ1のジョイン種別」「フェーズ2のジョイン種別」の各見出し直下にも、それぞれのフェーズだけを抜き出した図を追加するとよい -->
 
 ## フェーズ1のジョイン種別
 
