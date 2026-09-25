@@ -7,7 +7,14 @@ published: false
 publication_name: "ivry"
 ---
 
-こんにちは、IVRyでデータエンジニアとして働いている松田健司（[@ken_3ba](https://x.com/ken_3ba)）です。
+こんにちは、IVRyでデータエンジニアとして働いている松田健司（[@ken_3ba](https://x.com/ken_3ba)）です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
+
+先日、弘前市で開催された「あおもりビリヤードチャリティトーナメント」に参加してきました。51名が参加する大会で、決勝まで勝ち上がったものの、最後は一歩及ばず準優勝でした。悔しい結果でしたが、良い経験になりました。
+
+![あおもりビリヤードチャリティトーナメントの表彰式。左が筆者で準優勝の賞状を手にしている](/images/delta-lake-merge-into-internals-and-clustering/tournament.png)
+*あおもりビリヤードチャリティトーナメントの表彰式にて。左が筆者です*
+
+ビリヤードの小話はここまでにして、本題のDelta Lakeの`MERGE INTO`についてお話しします。
 
 `MERGE INTO`はDelta Lakeを使ううえで避けて通れない構文ですが、内部で何が起きているかを意識せずに使うと、思ったよりコストが高い・思ったより速くならないといった壁にぶつかります。本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部ジョイン戦略を整理し、さらにDatabricks SQLウェアハウス上でサンプルテーブルを作って実際に`DESCRIBE HISTORY`のoperationMetricsを取得し、パーティション+Z-orderとLiquid Clusteringで挙動がどう変わるかを検証しました。
 
