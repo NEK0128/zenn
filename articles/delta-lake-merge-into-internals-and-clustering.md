@@ -157,6 +157,8 @@ flowchart TB
 
 フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピングが効くかどうかが、パフォーマンスを大きく左右します。
 
+<!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする -->
+
 ## フェーズ1のジョイン種別
 
 `findTouchedFiles`（`ClassicMergeExecutor.scala`）は、`WHEN NOT MATCHED BY SOURCE`句の有無でジョイン種別を切り替えます。
@@ -242,6 +244,8 @@ WHEN NOT MATCHED BY SOURCE THEN UPDATE SET status = 'inactive'
 
 `Right Outer`なので、targetの全行（`user_id=3`含む）を取りこぼしません。ここで`NOT MATCHED BY SOURCE`句を処理対象にできる代わり、事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
 
+<!-- TODO(画像・優先度高): target 1,3 / source 1,2 のベン図的な図。MATCHED/NOT MATCHED/NOT MATCHED BY SOURCEの重なりを視覚化し、Inner/Right Outerでどの行が結果に残るかを一目でわかるようにする -->
+
 ## フェーズ2：DV無効とDV有効で何が根本的に違うか
 
 フェーズ2のジョイン種別に入る前に、DV（Deletion Vectors）の有無で書き込み方がどう変わるかを整理します。Deltaのファイルは一度書いたら中身を直接書き換えられません。1行だけ`UPDATE`したいときも、選択肢は次の2つしかありません。
@@ -250,6 +254,8 @@ WHEN NOT MATCHED BY SOURCE THEN UPDATE SET status = 'inactive'
 - **DV有効**: 元のファイルはそのまま残す。変更した行だけを新しい小さなファイルに書き、元ファイルには「この行はもう無効」という印（Deletion Vector）を別ファイルとして追加する。公式ドキュメントはこれを「soft-delete」と呼んでいます
 
 未変更行を「新ファイルにコピーする対象」として持つ必要があるかどうかが、そのままジョイン種別の広さに直結します。DV無効は未変更行もジョイン結果に含める必要があるためジョインが広め（`Right Outer`/`Full Outer`）になり、DV有効は変更対象の行だけに絞れるため狭いジョイン（`Inner`が使えるケースもある）で済みます。
+
+<!-- TODO(画像・優先度高): DV無効(ファイルを丸ごとコピーして書き直す)とDV有効(元ファイルは残し、差分だけ新規ファイル+DVファイルで管理する)の模式図。旧ファイル・新ファイル・DVファイルを箱で表し、矢印で書き込みの流れを示す -->
 
 ## フェーズ2のジョイン種別
 
@@ -365,6 +371,8 @@ flowchart LR
 ```
 
 この特殊ケースは、後述の実測検証で実際に裏付けが取れました。
+
+<!-- TODO(画像・優先度低): 上記Mermaid図をFigmaの図に差し替える -->
 
 # 実測検証：analysis-stgでサンプルテーブルを作って確かめる
 
@@ -498,6 +506,8 @@ WHEN MATCHED THEN UPDATE SET t.status = s.status, t.updated_at = s.updated_at
 | numTargetBytesAdded | 6,093,263 | 145,325 |
 
 どちらのテーブルも`delta.enableDeletionVectors = true`が設定された状態でしたが、結果は対照的でした。パーティション+Z-orderのテーブルはDVを使わず全ファイルを書き直したのに対し、Liquid Clusteringのテーブルは既存ファイルを1つも書き直さず、更新行だけを新規ファイルに書き、元のファイル側は5件のDeletion Vectorで該当行を無効化するだけで済んでいます。書き込みバイト数も約42分の1でした。
+
+<!-- TODO(画像・優先度低): partition+zorder(全ファイル書き直し)とliquid clustering(既存ファイル温存+DV追加)の結果を、ファイルの模式図で対比。灰色=既存ファイルそのまま、オレンジ=新規書き込み、のような色分けで一目で差がわかるようにする -->
 
 なぜこの差が出たのかを確認するため、Databricksの公式ドキュメントを調べましたが、この挙動差を断定的に説明する記述は見つかりませんでした。最も近い記述は[Low shuffle merge](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)のドキュメントにあり、「Low shuffle mergeは変更されなかった行の既存データレイアウト（Liquid ClusteringやZ-orderのレイアウトを含む）をbest-effortで保持する」と明記されています。つまり既存レイアウトの保持もDVの適用も「保証」ではなく「best-effort」の最適化です。今回はパーティション内の全ファイルに更新対象行が1件以上含まれる状況だったため、Z-order側ではこのbest-effortな最適化が効かなかった、という理解にとどめておくのが正直なところです。この差の正確な内部条件を突き止めるには、Spark UIのクエリDAGでジョインプランを直接確認する必要があり、今回のSQLウェアハウス経由の検証では踏み込めていません。
 
