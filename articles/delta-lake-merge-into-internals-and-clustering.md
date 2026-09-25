@@ -143,7 +143,7 @@ flowchart TB
 | `WHEN NOT MATCHED BY SOURCE`句がある | `Right Outer` | 効かない（全ファイルが対象） |
 | `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` | 効く（`ON`句のターゲット単独条件で絞り込み） |
 
-`sourceDF.join(targetDF, condition, joinType)`という書き方をしているので、`targetDF`（ターゲット）が`Right`側です。`Right Outer Join`は「右側（ターゲット）の行を、ソース側にマッチするかどうかに関わらず必ず結果に残す」ジョインです。`NOT MATCHED BY SOURCE`はまさに「ソースにマッチしなかったターゲット行」を処理対象にする句なので、`Inner`のままだとそのターゲット行自体がジョイン結果から消えてしまい、処理対象を見つけられません。だから`Right Outer`にして、ターゲット側の全行を取りこぼさないようにしています。
+なぜ`NOT MATCHED BY SOURCE`句がある場合だけ`Right Outer`になるのか、`sourceDF.join(targetDF, condition, joinType)`という書き方から見てみます。`targetDF`（ターゲット）が`Right`側です。`Right Outer Join`は「右側（ターゲット）の行を、ソース側にマッチするかどうかに関わらず必ず結果に残す」ジョインです。`NOT MATCHED BY SOURCE`はまさに「ソースにマッチしなかったターゲット行」を処理対象にする句なので、`Inner`のままだとそのターゲット行自体がジョイン結果から消えてしまい、処理対象を見つけられません。だから`NOT MATCHED BY SOURCE`句がある場合は`Right Outer`にして、ターゲット側の全行を取りこぼさないようにしています。
 
 そして、このジョイン種別の分岐は、後述する事前のファイルスキッピングが効くかどうかにも直結しています。
 
