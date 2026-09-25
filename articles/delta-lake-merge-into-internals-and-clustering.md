@@ -21,7 +21,7 @@ publication_name: "ivry"
 Databricksを利用していく上で差分更新をしたいといったときに`MERGE INTO`はDelta Lakeを使ううえで避けて通れない構文です。
 簡易に利用できるのですが、内部で何が起きているかを意識せずに使うと、思ったより処理に時間がかかったり、コストがかかったりするといった壁にぶつかります。そして、中の構文は結構複雑だったりして、理解するのはなかなか大変です。
 
-本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部ジョイン戦略について整理します。
+本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部処理について整理します。
 
 # TL;DR
 
@@ -33,16 +33,12 @@ Databricksを利用していく上で差分更新をしたいといったとき�
 
 # MERGE INTOについて
 
-`MERGE INTO`は、ソース側のデータをキーで突き合わせながらターゲットテーブルを更新する構文です。代表的な使いどころは以下のようなケースです。
+`MERGE INTO`は、ソース側のデータをキーで突き合わせながらターゲットテーブルを更新する構文です。よくある使いどころは以下のようなケースです。
 
 - **Upsert**: ソースのキーがターゲットに存在すれば更新、存在しなければ挿入する基本パターン
-- **重複排除を伴う取り込み**: ログデータなどをバッチ取り込みする際、既に取り込み済みのレコードを重複挿入しないようにする（ソース側自体の重複排除は別途必要）
 - **CDC・SCDの反映**: 変更データキャプチャ（CDC）で届いた差分を、SCD Type 1（上書き）やType 2（履歴保持）としてターゲットテーブルに反映する
-- **時間範囲を絞ったインクリメンタル同期**: 「直近N日分のソースレコードだけを対象に、マッチ分は更新・新規は挿入・対象期間内で消えたものは削除」という同期パターン
 
-原子性については、`MERGE INTO`固有の保証というより、Delta Lakeのトランザクション機構に支えられています。Delta Lakeは[Optimistic Concurrency Control（楽観的同時実行制御）](https://docs.delta.io/latest/concurrency-control.html)を採用しており、書き込みは「読み込み→変更内容をステージング→他の並行コミットと競合していないか検証してからコミット」という流れで行われます。検証に失敗すると`ConcurrentAppendException`などの例外が発生してコミット全体が失敗し、テーブルの状態は変更されません。公式ドキュメントに「MERGEの途中経過が部分的にテーブルへ反映される」という明示的な記述はありませんでしたが、このコミット機構から推測する限り、検証を通らない限りテーブルの状態は変わらない、つまり失敗時は全体が未適用のままになると考えてよさそうです。
-
-なお公式ドキュメントは、`MERGE`が他の同時書き込みと競合しやすい操作であることにも触れています。`ON`句や`matched_condition`でパーティション列などの絞り込み条件を明示しないと、テーブル全体をスキャンする形になり、他のパーティションを更新する並行処理とも競合しやすくなるとのことです。後述する「絞り込み条件を足すとファイルスキップが効く」という話は、パフォーマンスだけでなく同時実行時の競合を避けるという観点でも意味を持ちます。
+`MERGE`は[他の同時書き込みと競合しやすい操作](https://docs.delta.io/latest/concurrency-control.html)でもあります。`ON`句や`matched_condition`でパーティション列などの絞り込み条件を明示しないと、テーブル全体をスキャンする形になり、他のパーティションを更新する並行処理とも競合しやすくなります。後述する「絞り込み条件を足すとファイルスキップが効く」という話は、パフォーマンスだけでなく同時実行時の競合を避けるという観点でも意味を持ちます。
 
 Databricks SQL / Delta Lakeの`MERGE INTO`は次の構文になります。
 
@@ -57,45 +53,41 @@ MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table_name [target_alias]
 
 `target_table_name`が更新される側のDeltaテーブル（**ターゲットテーブル**）、`USING`句に指定するのが更新内容の元になるテーブル（**ソーステーブル**）です。ソーステーブルはDeltaテーブルである必要はなく、CSVから読み込んだDataFrameやCTE、別形式のテーブルなど、Sparkでクエリできるものであれば何でも指定できます。CDCパイプラインであれば「今回のバッチで届いた変更差分」、Upsertバッチであれば「最新の状態を持つ外部テーブル」がソーステーブルにあたり、`ON merge_condition`で指定したキーでターゲットテーブルの各行と突き合わせて、`WHEN`句に応じた`UPDATE`/`DELETE`/`INSERT`を行います。
 
-3種類の`WHEN`句があり、どれを書くか・書かないかの組み合わせによってMERGEの意味、そして内部で使われるジョイン戦略が変わります。
-
-| 句 | 意味 |
-|---|---|
-| `WHEN MATCHED` | マージキーが両方のテーブルに存在する行に対する`UPDATE`/`DELETE` |
-| `WHEN NOT MATCHED [BY TARGET]` | ソースにしか存在しない行に対する`INSERT` |
-| `WHEN NOT MATCHED BY SOURCE` | ターゲットにしか存在しない行に対する`UPDATE`/`DELETE` |
+3種類の`WHEN`句があり、どれを書くか・書かないかの組み合わせによってMERGEの意味、そして内部で使われるジョイン戦略が変わります。この対応関係は紛らわしいので、次の章で先に整理しておきます。
 
 # MERGE INTOの内部動作の詳細
 
 Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob/v3.2.0/spark/src/main/scala/org/apache/spark/sql/delta/commands/MergeIntoCommand.scala)）を見ると、`MERGE INTO`は大きく2つのフェーズで構成されていることが分かります。
 
-## 読む前に：こんがらがりやすい用語の対応
+## 用語の整理
 
-コードを読み進める前に、混同しやすい用語の対応関係を先に整理しておきます。
+解説を読み進める前に、混同しやすい用語の対応関係を先に整理しておきます。文中では`source`（ソーステーブル）と`target`（ターゲットテーブル）という言葉が繰り返し出てきます。
 
 | 用語 | 指すもの |
 |---|---|
-| `source` | `USING`句に書いたテーブル（今回のバッチ・差分） |
-| `target` | `MERGE INTO`の対象テーブル（更新される側） |
-| `left` | `sourceDF.join(targetDF, ...)`という書き方の左側 = **source** |
-| `right` | 同上の右側 = **target** |
+| `source` | 今回のバッチ・差分のデータ |
+| `target` | 更新される側のデータ |
 
-内部のコードは一貫して`sourceDF.join(targetDF, condition, joinType)`という書き方をしています。`.join()`を呼ぶ側（ドットの前）が`left`、引数に渡す側が`right`です。「`s`ourceは`l`eft、`t`argetは`r`ight」とアルファベットの並びで覚えると混同しにくくなります。
+内部のコードは一貫して`sourceDF.join(targetDF, condition, joinType)`という書き方をしています。`.join()`を呼ぶ側（ドットの前）が`left`、引数に渡す側が`right`です。つまり`left = source`、`right = target`という対応になります。「`s`ourceは`l`eft、`t`argetは`r`ight」とアルファベットの並びで覚えると混同しにくくなります。
 
 `WHEN`句の名前も紛らわしいので、あわせて整理します。
 
-| 句 | 直訳のニュアンス | 実際にどの行を指すか | 主なアクション |
-|---|---|---|---|
-| `WHEN MATCHED` | マッチする | sourceとtargetの**両方**に存在する行 | UPDATE / DELETE |
-| `WHEN NOT MATCHED`（`BY SOURCE`なし） | （targetを主語に）マッチしない | **source**にしかない行（新しく届いた行） | INSERT |
-| `WHEN NOT MATCHED BY SOURCE` | **source**によってマッチされない | **target**にしかない行（もう届かなくなった行） | UPDATE / DELETE |
+| 句 | 実際にどの行を指すか | 主なアクション |
+|---|---|---|
+| `WHEN MATCHED` | sourceとtargetの**両方**に存在する行 | UPDATE / DELETE |
+| `WHEN NOT MATCHED`（`BY SOURCE`なし） | **source**にしかない行（新しく届いた行） | INSERT |
+| `WHEN NOT MATCHED BY SOURCE` | **target**にしかない行（もう届かなくなった行） | UPDATE / DELETE |
 
-`NOT MATCHED BY SOURCE`は「ソースによってマッチされない」という意味で、主語はtargetの行です。`BY SOURCE`が付いている方が「sourceを主語にした視点」で、指している行は逆に**target側**にしかない行になる、という点が直感に反して混同しやすいポイントです。「`NOT MATCHED`（無印）はINSERT用の新規行、`BY SOURCE`が付いたらtargetのお片付け用」と覚えておくと区別しやすくなります。
+`NOT MATCHED BY SOURCE`は「ソースによってマッチされない」という意味で、主語はtargetの行です。`BY SOURCE`が付いている方が指している行はtarget側にしかない行になる、という点が直感に反して混同しやすいポイントです。「`NOT MATCHED`（無印）はINSERT用の新規行、`BY SOURCE`が付いたらtargetのお片付け用」と覚えておくと区別しやすくなります。
+
+## フェーズで見るMERGE INTOの内部動作
+
+用語が整理できたところで、`MERGE INTO`をおおまかにフェーズで分けて見ていきます。
 
 1. **フェーズ1: 対象ファイルの特定（`findTouchedFiles`）**: ソーステーブルとターゲットテーブルをマージキーでジョインし、更新・削除の対象になり得る**ファイルを特定する**
 2. **フェーズ2: 書き込み内容の計算（`writeAllChanges` / `writeDVs`）**: ソーステーブルと、フェーズ1で見つかった対象ファイルを再度ジョインし、**実際に書き込む内容を計算する**
 
-`MergeIntoCommand.scala`（v3.2.0、119行目付近）を単純化すると、全体の制御フローはおおよそ次のようになっています。
+実際のコード（`MergeIntoCommand.scala`）を単純化すると、全体の制御フローはおおよそ次のようになっています。
 
 ```scala
 // フェーズ1: 対象ファイルの特定
@@ -133,6 +125,8 @@ if (filesToRewrite.nonEmpty) {
 
 `writeAllChanges`の`writeUnmodifiedRows`引数に、DVが有効か無効かがそのまま渡っているのが分かります。DV有効なら`false`（未変更行は書かない）、無効なら`true`（丸ごと書き直す）です。DV有効時のみ、`writeAllChanges`とは別に`writeDVs`が呼ばれて既存ファイル側にDeletion Vectorが書き込まれます。
 
+フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピングが効くかどうかが、パフォーマンスを大きく左右します。全体像は次のようになります。
+
 ```mermaid
 flowchart TB
     subgraph P1["フェーズ1: 対象ファイルの特定 (findTouchedFiles)"]
@@ -155,9 +149,7 @@ flowchart TB
     P1 --> P2
 ```
 
-フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピングが効くかどうかが、パフォーマンスを大きく左右します。
-
-<!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする -->
+<!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする。この後の「フェーズ1のジョイン種別」「フェーズ2のジョイン種別」の各見出し直下にも、それぞれのフェーズだけを抜き出した図を追加するとよい -->
 
 ## フェーズ1のジョイン種別
 
