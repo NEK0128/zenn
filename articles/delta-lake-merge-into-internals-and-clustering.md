@@ -136,7 +136,7 @@ flowchart TB
 
 ## フェーズ1のジョイン種別
 
-`MergeIntoCommand.scala`の`findTouchedFiles`は、`WHEN NOT MATCHED BY SOURCE`句の有無でジョイン種別を切り替えます。
+`findTouchedFiles`（`ClassicMergeExecutor.scala`）は、`WHEN NOT MATCHED BY SOURCE`句の有無でジョイン種別を切り替えます。
 
 | 条件 | ジョイン種別 |
 |---|---|
@@ -144,6 +144,32 @@ flowchart TB
 | `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` |
 
 `NOT MATCHED BY SOURCE`はターゲット側にしか存在しない行を扱う句なので、それを拾うためにターゲット側を主体にしたOuter Joinが必要になります。
+
+実際のコードでは、ジョインの前に「事前のファイル絞り込み」が入っています。ここが検証2で見た「`ON`句に条件を1つ足すと90ファイル→1ファイルに減る」現象の正体です。
+
+```scala
+// NOT MATCHED BY SOURCE句を扱わなくてよいなら、事前にファイルを絞り込める
+val dataSkippedFiles =
+  if (notMatchedBySourceClauses.isEmpty) {
+    deltaTxn.filterFiles(getTargetOnlyPredicates(spark), keepNumRecords = true)
+  } else {
+    deltaTxn.filterFiles(filters = Seq(Literal.TrueLiteral), keepNumRecords = true)
+  }
+
+// ジョイン種別の決定: NOT MATCHED BY SOURCE句があるかどうかで切り替わる
+val joinType = if (notMatchedBySourceClauses.isEmpty) "inner" else "right_outer"
+
+// sourceDF/targetDFを組み立てて、ON句の条件(condition)でジョイン
+val sourceDF = getMergeSource.df
+val targetDF = Dataset.ofRows(spark, targetPlan) // targetPlanはdataSkippedFilesだけを読む
+
+val joinToFindTouchedFiles =
+  sourceDF.join(targetDF, Column(condition), joinType)
+```
+
+（実コードを単純化した抜粋です。列の付与やメトリクス計測など、この記事のテーマに関係しない処理は省略しています）
+
+`notMatchedBySourceClauses.isEmpty`のときだけ、`getTargetOnlyPredicates(spark)`（`ON`句のうちターゲット単独で評価できる条件、例えば`t.event_date = DATE'2026-01-05'`）を使って`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングがここで行われます。`NOT MATCHED BY SOURCE`句があると、ターゲット側だけの行（ソースにマッチしない行）も処理対象に含める必要があるため、事前にファイルを除外できず`Literal.TrueLiteral`（全ファイル対象）になります。`targetPlan`はこの`dataSkippedFiles`で絞り込まれた後のファイルだけを読むように組まれているので、ジョインそのものよりも前の「事前の絞り込み」の段階で、対象ファイル数がほぼ決まってしまうということです。
 
 ## フェーズ2のジョイン種別
 
