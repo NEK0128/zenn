@@ -221,6 +221,33 @@ DV無効は未変更行も含める必要があるためジョインが広め（
 | 読む範囲 | テーブル全体| フェーズ1が特定した対象ファイルのみ |
 | 目的 | 「どのファイルが対象になり得るか」を判定する | 対象ファイルの中身を実際に書き直すため、行ごとの値を計算する |
 
+`writeAllChanges`（`ClassicMergeExecutor.scala`）のジョイン種別決定部分を単純化すると、次のようになっています。
+
+```scala
+val joinType = if (writeUnmodifiedRows) {
+  // DV無効: 未変更行も書き込む必要がある
+  if (isMatchedOnly) {
+    "rightOuter"
+  } else {
+    "fullOuter"
+  }
+} else {
+  // DV有効: 未変更行を書かなくてよい分、条件を絞り込める
+  if (isMatchedOnly) {
+    "inner"
+  } else if (notMatchedBySourceClauses.isEmpty) {
+    "leftOuter"
+  } else if (notMatchedClauses.isEmpty) {
+    "rightOuter"
+  } else {
+    "fullOuter"
+  }
+}
+```
+
+（実コードを単純化した抜粋です。CDF関連の処理など、この記事のテーマに関係しない部分は省略しています）
+
+`writeUnmodifiedRows`は、前述の`shouldWritePersistentDeletionVectors`の結果がそのまま渡ってくる引数です。DV無効時は`true`（未変更行も書き込む）、DV有効時は`false`（未変更行は書かない）になります。DV無効側は`isMatchedOnly`（`WHEN MATCHED`句しかないか）だけで`rightOuter`/`fullOuter`の2択になりますが、DV有効側は`isMatchedOnly`・`notMatchedBySourceClauses`・`notMatchedClauses`の3つの条件を順に見ていくことで、4種類のジョインを使い分けています。
 
 ### DVが無効の場合
 
@@ -305,7 +332,9 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ## 特殊ケース：Insert-only MERGE
 
-`WHEN NOT MATCHED THEN INSERT`だけを持つMERGEは特別扱いされます。フェーズ1のジョインは`Left Anti`になり、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記（append）で完結します。
+`WHEN NOT MATCHED THEN INSERT`だけを持つMERGEは特別扱いされます。フェーズ1のジョインは`Left Anti`になり、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記で完結します。
+
+![Left Anti Joinのベン図。ソースにあってターゲットにない行だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/left-anti-join.png)
 
 ![Insert-only MERGEの処理フロー。ソーステーブルとターゲットテーブルをLeft Anti Joinし、ターゲットに存在しない行だけを新規ファイルとして追記する](/images/delta-lake-merge-into-internals-and-clustering/insert-only-merge-flow.png)
 
@@ -317,14 +346,18 @@ Liquid Clusteringも、[Low shuffle merge](https://learn.microsoft.com/en-us/azu
 
 # まとめ
 
-- `MERGE INTO`は「対象ファイルを絞り込むジョイン」→「書き込み内容を計算するジョインと書き込み」の2フェーズ構成。ジョイン種別は`WHEN`句の組み合わせとDVの有効・無効で機械的に決まる。
-- Insert-only MERGEは`Left Anti`ジョインになり、既存ファイルを一切書き換えない。
-- DV有効なら変更対象の行だけを新規ファイルに書けばよく、DV無効なら該当ファイルを丸ごと書き直すCopy-on-Write方式になる。
-- Z-orderやLiquid Clusteringによるデータスキッピングは、ソース側の絞り込み条件が狭いことを前提にした最適化であり、`ON`句にパーティション列などの絞り込み条件を明示しない限り十分に効かないことがある。
+本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部動作を整理しました。`MERGE INTO`は「対象ファイルを絞り込むフェーズ1」と「書き込み内容を計算するフェーズ2」という2段階のジョインで構成されていて、実際に使われるジョイン種別（Inner / Left Outer / Right Outer / Full Outer / Left Anti）は、`WHEN`句の組み合わせとDeletion Vectorsの有効・無効によって機械的に決まります。
+
+とくに印象的だったのは、Insert-onlyパターンが`Left Anti`ジョインとして特別扱いされ、既存ファイルに一切触れず単純な追記で完結する点と、DVの有効・無効で書き込みコストが大きく変わる点です。DV有効なら変更対象の行だけを新規ファイルに書けばよいのに対し、DV無効だと該当ファイルを丸ごと書き直すCopy-on-Write方式になり、同じ`UPDATE`でも内部で起きていることはまったく違います。
+
+Z-orderやLiquid Clusteringによるデータスキッピングも、`MERGE INTO`に対しては万能ではありません。ソース側の絞り込み条件が狭いときにしか効かず、CDC由来のバッチのようにキーがテーブル全体に散らばっていると、クラスタリングしていてもスキップできる余地がほとんどなくなります。`ON`句にパーティション列などの絞り込み条件を明示できるかどうかが、実運用でのパフォーマンスを左右しそうです。
+
+内部の仕組みを知っておくと、`MERGE INTO`が重い・コストがかかると感じたときに「ソース側の条件を絞れないか」「DVを有効にできないか」といった打ち手を、憶測ではなく根拠を持って選べるようになります。
 
 # 参考リンク
 
 - [delta-io/delta: MergeIntoCommand.scala (v3.2.0)](https://github.com/delta-io/delta/blob/v3.2.0/spark/src/main/scala/org/apache/spark/sql/delta/commands/MergeIntoCommand.scala)
+- [delta-io/delta: ClassicMergeExecutor.scala (v3.2.0)](https://github.com/delta-io/delta/blob/v3.2.0/spark/src/main/scala/org/apache/spark/sql/delta/commands/merge/ClassicMergeExecutor.scala)
 - [Diving Into Delta Lake: DML Internals (Update, Delete, Merge) - Databricks Blog](https://www.databricks.com/blog/2020/09/29/diving-into-delta-lake-dml-internals-update-delete-merge.html)
 - [Faster MERGE Performance With Low-Shuffle Merge and Photon - Databricks Blog](https://www.databricks.com/blog/faster-merge-performance-low-shuffle-merge-and-photon)
 - [Low shuffle merge on Databricks](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)
