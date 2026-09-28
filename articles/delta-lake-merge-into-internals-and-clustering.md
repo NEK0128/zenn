@@ -86,7 +86,7 @@ Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob
 
 フェーズ1は「どのファイルを読み直す必要があるか」を絞り込むための軽量なジョイン、フェーズ2は実際にデータを書き出すための本番ジョインという役割分担です。ここでファイル単位のデータスキッピングが効くかどうかが、パフォーマンスを大きく左右します。全体像は次のようになります。
 
-![MERGE INTOのフェーズ1・フェーズ2の全体像。円柱がデータ、六角形が処理を表す](/images/delta-lake-merge-into-internals-and-clustering/merge-into-phases-overview.png)
+![MERGE INTOのフェーズ1・フェーズ2の全体像](/images/delta-lake-merge-into-internals-and-clustering/merge-into-phases-overview.png)
 *フェーズ1でソース・ターゲットをジョインして対象ファイルを特定し、フェーズ2でソースと再ジョインして書き込む*
 
 実際のコード（`MergeIntoCommand.scala`）を単純化すると、全体の制御フローはおおよそ次のようになっています。
@@ -123,22 +123,33 @@ if (filesToRewrite.nonEmpty) {
 }
 ```
 
-（実コードを単純化した抜粋です。エラーハンドリングやメトリクス収集など、この記事のテーマに関係しない処理は省略しています）
+
 
 `writeAllChanges`の`writeUnmodifiedRows`引数に、DVが有効か無効かがそのまま渡っているのが分かります。DV有効なら`false`（未変更行は書かない）、無効なら`true`（丸ごと書き直す）です。DV有効時のみ、`writeAllChanges`とは別に`writeDVs`が呼ばれて既存ファイル側にDeletion Vectorが書き込まれます。
 
 ## フェーズ1のジョイン種別
 
-`findTouchedFiles`（`ClassicMergeExecutor.scala`）は、`WHEN NOT MATCHED BY SOURCE`句の有無でジョイン種別を切り替えます。
+`findTouchedFiles`は、`WHEN NOT MATCHED BY SOURCE`句の有無でジョイン種別を切り替えます。
 
 | 条件 | ジョイン種別 | Z-orderによる事前スキッピング |
 |---|---|---|
 | `WHEN NOT MATCHED BY SOURCE`句がある | `Right Outer` | 効かない（全ファイルが対象） |
 | `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` | 効く（`ON`句のターゲット単独条件で絞り込み） |
 
-`NOT MATCHED BY SOURCE`は「ソースにマッチしなかったターゲット行」を処理対象にする句です。`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。
+`NOT MATCHED BY SOURCE`は「ソースにマッチしなかったターゲット行」を処理対象にする句です。
+`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。
 
-target（`user_id=1,3`）とsource（`user_id=1,2`）の例で見ると、`WHEN NOT MATCHED BY SOURCE`句がない場合（`joinType = inner`）は`user_id=1`（MATCHED）だけがジョイン結果に残ります。句がある場合（`joinType = right_outer`）は`user_id=3`（NOT MATCHED BY SOURCE、source側の列は全部NULL）も残り、そのぶん事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
+### 具体例：フェーズ1のジョイン結果
+
+target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、`joinType`ごとにジョイン結果へ残る行は次のようになります。
+
+| user_id | target | source | `joinType = inner` | `joinType = right_outer` |
+|---|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHED） | 残る（MATCHED） |
+| 2 | - | ○ | 残らない | 残らない |
+| 3 | ○ | - | 残らない | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
+
+`right_outer`だと`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
 
 実際のコードでは、ジョインの前に事前のファイル絞り込みが入ります。
 
@@ -187,7 +198,16 @@ Deltaのファイルは一度書いたら中身を直接書き換えられませ
 | `WHEN MATCHED`句しかない | `Right Outer` |
 | それ以外（`NOT MATCHED`や`NOT MATCHED BY SOURCE`を含む） | `Full Outer` |
 
-DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため`Inner`にはなりません。先ほどのtarget（`user_id=1,3`）・source（`user_id=1,2`）の例で`WHEN MATCHED`句しかない場合（`joinType = rightOuter`）を見ると、`user_id=1`はMATCHEDとして`UPDATE`され、未変更の`user_id=3`も該当する`WHEN`句がないため「そのままコピー」としてジョイン結果に含まれます。これが、DV無効時にファイル全体を書き直す動作の正体です。
+DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため`Inner`にはなりません。`WHEN MATCHED`句しかない場合でも`Right Outer`にして、未変更行を「該当する`WHEN`句がないのでそのままコピー」としてジョイン結果に含めます。これが、DV無効時にファイル全体を書き直す動作の正体です。
+
+### 具体例：DV無効時のジョイン結果
+
+先ほどと同じtarget（`user_id=1,3`）・source（`user_id=1,2`）で、`WHEN MATCHED`句しかない場合（`joinType = rightOuter`）のジョイン結果は次の通りです。
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
+| 3 | ○ | - | 残る（該当する`WHEN`句がないためそのままコピー） |
 
 **DVが有効の場合**
 
@@ -200,7 +220,14 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイル（該当ファイル内のどの行が無効化されたかを記録するサイドカーファイル）に書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
 
-同じtarget・sourceで`WHEN MATCHED`句のみの場合（`joinType = inner`）を見ると、変更対象の`user_id=1`しかジョイン結果に出てきません。未変更の`user_id=3`はそもそも結果に含まれず、既存ファイルもDVも触られません。
+### 具体例：DV有効時のジョイン結果
+
+同じtarget・sourceで`WHEN MATCHED`句のみの場合（`joinType = inner`）のジョイン結果は次の通りです。
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（変更対象として`UPDATE`） |
+| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
 
 ## 特殊ケース：Insert-only MERGE
 
