@@ -201,7 +201,10 @@ Deltaのファイルは一度書いたら中身を直接書き換えられませ
 
 未変更行を新ファイルにコピーする必要があるかどうかが、そのままジョイン種別の広さに直結します。DV無効は未変更行も含める必要があるためジョインが広め（`Right Outer`/`Full Outer`）になり、DV有効は変更対象の行だけに絞れるため狭いジョイン（`Inner`が使えるケースもある）で済みます。
 
-<!-- TODO(画像・優先度高): DV無効(ファイルを丸ごとコピーして書き直す)とDV有効(元ファイルは残し、差分だけ新規ファイル+DVファイルで管理する)の模式図。旧ファイル・新ファイル・DVファイルを箱で表し、矢印で書き込みの流れを示す -->
+DELETEの例で見ると、この違いがより直感的にわかります。
+
+![DV OFF（左）とDV ON（右）でのDELETE処理の違い。DV OFFはファイルを丸ごと書き直すが、DV ONは対象行をDVファイルに記録するだけで既存ファイルを書き直さない](/images/delta-lake-merge-into-internals-and-clustering/dv-off-vs-on-delete.png)
+*出典: Omar LARAQUI, "[Optimizing PySpark Workloads with Deletion Vectors in Databricks: A Comprehensive Guide](https://blog.dataengineerthings.org/optimizing-pyspark-workloads-with-deletion-vectors-in-databricks-a-comprehensive-guide-99f37a583a23)" (Data Engineer Things)*
 
 ## フェーズ2のジョイン種別
 
@@ -277,5 +280,6 @@ Liquid Clusteringも、[Low shuffle merge](https://learn.microsoft.com/en-us/azu
 - [Low shuffle merge on Databricks](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)
 - [Deletion vectors in Databricks](https://docs.databricks.com/aws/en/delta/deletion-vectors)
 - [What are deletion vectors? - Delta Lake](https://docs.delta.io/latest/delta-deletion-vectors.html)
+- [Optimizing PySpark Workloads with Deletion Vectors in Databricks: A Comprehensive Guide - Omar LARAQUI (Data Engineer Things)](https://blog.dataengineerthings.org/optimizing-pyspark-workloads-with-deletion-vectors-in-databricks-a-comprehensive-guide-99f37a583a23)
 - [MERGE INTO - Databricks SQL言語リファレンス](https://docs.databricks.com/en/sql/language-manual/delta-merge-into.html)
 - [Concurrency control - Delta Lake](https://docs.delta.io/latest/concurrency-control.html)
