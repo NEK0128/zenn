@@ -284,7 +284,7 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ![Inner Join、Left Outer Join、Right Outer Join、Full Outer Joinのベン図。左上がInner、右上がLeft Outer、左下がRight Outer、右下がFull Outer](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-on-join-types.png)
 
-書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
+書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された行は既存ファイルを書き直さずに新規のDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
 
 **具体例**
 
@@ -330,11 +330,13 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 MERGE INTOはデフォルトでソーステーブル全体をジョインの一方の入力として扱うため、Z-orderのようなファイル単位のデータスキッピングは、ソース側の絞り込み条件が狭いときにしか効きません。CDC由来のバッチのようにキーがテーブル全体に散らばっていると、スキップできる余地がほとんどなくなります。`ON`句にパーティション列などの絞り込み条件を明示することで、この事前フィルタが効くようになります。
 
-Liquid Clusteringも、[Low shuffle merge](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)のドキュメントに「変更されなかった行の既存レイアウトをbest-effortで保持する」と明記されています。どちらのクラスタリング手法も、MERGE INTOに対しては「保証された最適化」ではなく「条件が揃えば効く最適化」という位置づけです。
+Liquid Clusteringにも同様の弱点があります。`MERGE INTO`は対象ファイルを書き直す際、本来のクラスタリング順序を崩してしまうことがあります。これを緩和するのが[Low shuffle merge](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)で、変更されなかった行についてはクラスタリングのレイアウトをbest-effortで保持します。ただしあくまでbest-effortなので保証はなく、更新・追加された行のレイアウトは最適でない場合があり、別途`OPTIMIZE`が必要になることもあるとドキュメントに明記されています。
+
+どちらのクラスタリング手法も、MERGE INTOに対しては「保証された最適化」ではなく「条件が揃えば効く最適化」という位置づけです。
 
 # まとめ
 
-本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部動作を整理しました。`MERGE INTO`は「対象ファイルを絞り込むフェーズ1」と「書き込み内容を計算するフェーズ2」という2段階のジョインで構成されていて、実際に使われるジョイン種別（Inner / Left Outer / Right Outer / Full Outer / Left Anti）は、`WHEN`句の組み合わせとDeletion Vectorsの有効・無効によって機械的に決まります。
+本記事では、Delta LakeのOSSコードを読みながら`MERGE INTO`の内部動作を整理しました。`MERGE INTO`は「対象ファイルを絞り込むフェーズ1」と「書き込み内容を計算するフェーズ2」という2段階のジョインで構成されていて、実際に使われるジョイン種別は、`WHEN`句の組み合わせとDeletion Vectorsの有効・無効によって機械的に決まります。
 
 とくに印象的だったのは、Insert-onlyパターンが`Left Anti`ジョインとして特別扱いされ、既存ファイルに一切触れず単純な追記で完結する点と、DVの有効・無効で書き込みコストが大きく変わる点です。DV有効なら変更対象の行だけを新規ファイルに書けばよいのに対し、DV無効だと該当ファイルを丸ごと書き直すCopy-on-Write方式になり、同じ`UPDATE`でも内部で起きていることはまったく違います。
 
