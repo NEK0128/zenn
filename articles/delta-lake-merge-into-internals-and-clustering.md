@@ -106,11 +106,6 @@ flowchart TB
     end
 
     P1 --> P2
-
-    classDef dataNode fill:#dbe9ff,stroke:#3b6fbf,color:#1a2b4d
-    classDef processNode fill:#ffe6c7,stroke:#c9791a,color:#4d2e00
-    class S1,T1,F1,S2 dataNode
-    class J1,J2,W processNode
 ```
 
 <!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする。この後の「フェーズ1のジョイン種別」「フェーズ2のジョイン種別」の各見出し直下にも、それぞれのフェーズだけを抜き出した図を追加するとよい -->
