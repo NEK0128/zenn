@@ -209,7 +209,9 @@ DV無効は未変更行も含める必要があるためジョインが広め（
 ![DV無効（左）と有効（右）でのDELETE処理の違い。無効な場合はファイルを丸ごと書き直すが、有効な場合は対象行をDVファイルに記録するだけで既存ファイルを書き直さない](/images/delta-lake-merge-into-internals-and-clustering/dv-off-vs-on-delete.png)
 *出典: Omar LARAQUI, "[Optimizing PySpark Workloads with Deletion Vectors in Databricks: A Comprehensive Guide](https://blog.dataengineerthings.org/optimizing-pyspark-workloads-with-deletion-vectors-in-databricks-a-comprehensive-guide-99f37a583a23)" (Data Engineer Things)*
 
-## フェーズ2のジョイン種別
+## フェーズ2：書き込み内容の計算
+
+フェーズ2のジョインは、フェーズ1で特定した対象ファイルとソースを再度突き合わせて、実際にターゲットテーブルへ書き込む内容（行の値）を計算するために行われます。DVの有効・無効によって、ここで使われるジョイン種別が変わります。
 
 **DVが無効の場合**
 
