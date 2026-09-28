@@ -129,7 +129,8 @@ if (filesToRewrite.nonEmpty) {
 
 ## フェーズ1：対象ファイルの特定
 
-フェーズ1のジョインは、行の値を計算するためのものではなく、あくまで「更新・削除の対象になり得るファイルを特定する」ためだけに行われます。ソースとターゲットをマージキーでジョインし、マッチした行が属するファイルを対象ファイルとして記録する、という使い方です。
+フェーズ1では、更新・削除の対象になり得るファイルを特定するために
+ソースとターゲットをマージキーでジョインし、マッチした行が属するファイルを対象ファイルとして記録します。
 
 `findTouchedFiles`は、`WHEN NOT MATCHED BY SOURCE`句の有無でこのジョインの種別を切り替えます。
 
@@ -165,7 +166,7 @@ target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン
 
 ![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
 
-`WHEN NOT MATCHED BY SOURCE`句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
+`WHEN NOT MATCHED BY SOURCE`句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります。
 
 実際のコードでは、ジョインの前に事前のファイル絞り込みが入ります。
 
@@ -190,11 +191,12 @@ val joinToFindTouchedFiles =
   sourceDF.join(targetDF, Column(condition), joinType)
 ```
 
-`getTargetOnlyPredicates(spark)`は`ON`句のうちターゲット単独で評価できる条件（例えば`t.event_date = DATE'2026-01-05'`）を取り出す関数で、`notMatchedBySourceClauses.isEmpty`のときだけこれを使って`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングが行われます。
+`notMatchedBySourceClauses.isEmpty`のときだけ`getTargetOnlyPredicates(spark)`で`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングが行われます。`NOT MATCHED BY SOURCE`句があると事前にファイルを除外できず、全ファイルが対象になります。
 
 ## フェーズ2：DV無効と有効の違い
 
-Deltaのファイルはimmutableなため、一度書いたら中身を直接書き換えられません。DVの有無で、`UPDATE`の処理が変わります。
+Deltaのファイルはimmutableなため、一度書いたら中身を直接書き換えられません。
+DVの有無で、`UPDATE`の処理が変わります。
 
 - **DV無効（Copy-on-Write）**: 対象ファイルを丸ごと新しいファイルとして書き直す。変更しない行も含めて全部コピーする
 - **DV有効**: 元のファイルは残し、変更した行だけを新しい小さなファイルに書く。元ファイル側には「この行はもう無効」という印（Deletion Vector）を追加する
@@ -270,7 +272,7 @@ Liquid Clusteringも、[Low shuffle merge](https://learn.microsoft.com/en-us/azu
 
 - `MERGE INTO`は「対象ファイルを絞り込むジョイン」→「書き込み内容を計算するジョインと書き込み」の2フェーズ構成。ジョイン種別は`WHEN`句の組み合わせとDVの有効・無効で機械的に決まる。
 - Insert-only MERGEは`Left Anti`ジョインになり、既存ファイルを一切書き換えない。
-- DV有効なら変更対象の行だけを新規ファイルに書けばよく、無効なら該当ファイルを丸ごと書き直すCopy-on-Write方式になる。
+- DV有効なら変更対象の行だけを新規ファイルに書けばよく、DV無効なら該当ファイルを丸ごと書き直すCopy-on-Write方式になる。
 - Z-orderやLiquid Clusteringによるデータスキッピングは、ソース側の絞り込み条件が狭いことを前提にした最適化であり、`ON`句にパーティション列などの絞り込み条件を明示しない限り十分に効かないことがある。
 
 # 参考リンク
