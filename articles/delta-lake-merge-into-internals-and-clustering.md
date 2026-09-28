@@ -204,7 +204,7 @@ DVの有無で、`UPDATE`の処理が変わります。
 未変更行を新ファイルにコピーする必要があるかどうかが、そのままジョイン種別の広さに直結します。
 DV無効は未変更行も含める必要があるためジョインが広め（`Right Outer`/`Full Outer`）になり、DV有効は変更対象の行だけに絞れるため狭いジョイン（`Inner`が使えるケースもある）で済みます。
 
-DELETEの例で見ると、この違いがより直感的にわかります。
+以下のDELETEの例で見ると、この違いがより直感的にわかるかと思います
 
 ![DV無効（左）と有効（右）でのDELETE処理の違い。無効な場合はファイルを丸ごと書き直すが、有効な場合は対象行をDVファイルに記録するだけで既存ファイルを書き直さない](/images/delta-lake-merge-into-internals-and-clustering/dv-off-vs-on-delete.png)
 *出典: Omar LARAQUI, "[Optimizing PySpark Workloads with Deletion Vectors in Databricks: A Comprehensive Guide](https://blog.dataengineerthings.org/optimizing-pyspark-workloads-with-deletion-vectors-in-databricks-a-comprehensive-guide-99f37a583a23)" (Data Engineer Things)*
@@ -237,6 +237,8 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 | `WHEN NOT MATCHED BY SOURCE`句がない | `Left Outer` |
 | `WHEN NOT MATCHED`句がない | `Right Outer` |
 | それ以外（全ての節がある） | `Full Outer` |
+
+![Full Outer Joinのベン図。ソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/full-outer-join.png)
 
 書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイル（該当ファイル内のどの行が無効化されたかを記録するサイドカーファイル）に書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
 
