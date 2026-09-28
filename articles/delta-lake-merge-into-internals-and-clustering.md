@@ -139,6 +139,10 @@ if (filesToRewrite.nonEmpty) {
 | `WHEN NOT MATCHED BY SOURCE`句がある | `Right Outer` | 効かない（全ファイルが対象） |
 | `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` | 効く（`ON`句のターゲット単独条件で絞り込み） |
 
+![Inner Joinのベン図。ソースとターゲットが重なる部分だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/inner-join.png)
+
+![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
+
 `NOT MATCHED BY SOURCE`は「ソースにマッチしなかったターゲット行」を処理対象にする句です。
 `Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。
 
@@ -154,8 +158,6 @@ target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン
 | 2 | - | ○ | 残らない |
 | 3 | ○ | - | 残らない |
 
-![Inner Joinのベン図。ソースとターゲットが重なる部分だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/inner-join.png)
-
 **`WHEN NOT MATCHED BY SOURCE`句がある（`joinType = right_outer`）**
 
 | user_id | target | source | ジョイン結果 |
@@ -163,8 +165,6 @@ target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン
 | 1 | ○ | ○ | 残る（MATCHED） |
 | 2 | - | ○ | 残らない |
 | 3 | ○ | - | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
-
-![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
 
 `WHEN NOT MATCHED BY SOURCE`句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります。
 
@@ -229,6 +229,10 @@ DV無効は未変更行も含める必要があるためジョインが広め（
 | `WHEN MATCHED`句しかない | `Right Outer` |
 | それ以外（`NOT MATCHED`や`NOT MATCHED BY SOURCE`を含む） | `Full Outer` |
 
+![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
+
+![Full Outer Joinのベン図。ソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/full-outer-join.png)
+
 DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。未変更行は「該当する`WHEN`句がないのでそのままコピー」としてジョイン結果に含まれます。これが、DV無効時にファイル全体を書き直す動作の正体です。
 
 **具体例**
@@ -257,6 +261,12 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 | `WHEN NOT MATCHED`句がない | `Right Outer` |
 | それ以外（全ての節がある） | `Full Outer` |
 
+![Inner Joinのベン図。ソースとターゲットが重なる部分だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/inner-join.png)
+
+![Left Outer Joinのベン図。ソース全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/left-outer-join.png)
+
+![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
+
 ![Full Outer Joinのベン図。ソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/full-outer-join.png)
 
 書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイル（該当ファイル内のどの行が無効化されたかを記録するサイドカーファイル）に書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
@@ -269,6 +279,21 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 |---|---|---|---|
 | 1 | ○ | ○ | 残る（変更対象として`UPDATE`） |
 | 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
+
+`WHEN NOT MATCHED BY SOURCE`句がない場合（`joinType = leftOuter`）、sourceにしかない行も結果に残ります。
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
+| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
+| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
+
+`WHEN NOT MATCHED`句がない場合（`joinType = rightOuter`）、targetにしかない行も結果に残ります。
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
+| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
 
 全種類の`WHEN`句がある場合（`joinType = fullOuter`）は、3行すべてが結果に残ります。
 
