@@ -27,7 +27,7 @@ Databricksで差分更新をしたいとき、`MERGE INTO`はDelta Lakeを使う
 # TL;DR
 
 - `MERGE INTO`は内部的に2段階のジョインで実行される。フェーズ1でファイルを絞り込み、フェーズ2で書き込み内容を計算する。
-- ジョイン種別（Inner / Left Outer / Right Outer / Full Outer / Left Anti）は、`WHEN`句の組み合わせとDeletion Vectors（DV）の有効・無効で決まる。
+- ジョイン種別は、`WHEN`句の組み合わせとDeletion Vectors（DV）の有効・無効で決まる。
 - Z-orderやLiquid Clusteringによるデータスキッピングは、ソース側の絞り込み条件が狭いときしか効かない。
 
 # MERGE INTOについて
@@ -139,9 +139,7 @@ if (filesToRewrite.nonEmpty) {
 | `WHEN NOT MATCHED BY SOURCE`句がある | `Right Outer` | 効かない（全ファイルが対象） |
 | `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` | 効く（`ON`句のターゲット単独条件で絞り込み） |
 
-![Inner Joinのベン図。ソースとターゲットが重なる部分だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/inner-join.png)
-
-![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
+![Inner JoinとRight Outer Joinのベン図。Innerはソースとターゲットが重なる部分だけ、Right Outerはターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase1-join-types.png)
 
 `NOT MATCHED BY SOURCE`は「ソースにマッチしなかったターゲット行」を処理対象にする句です。
 `Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。
@@ -245,8 +243,6 @@ val joinType = if (writeUnmodifiedRows) {
 }
 ```
 
-（実コードを単純化した抜粋です。CDF関連の処理など、この記事のテーマに関係しない部分は省略しています）
-
 `writeUnmodifiedRows`は、前述の`shouldWritePersistentDeletionVectors`の結果がそのまま渡ってくる引数です。DV無効時は`true`（未変更行も書き込む）、DV有効時は`false`（未変更行は書かない）になります。DV無効側は`isMatchedOnly`（`WHEN MATCHED`句しかないか）だけで`rightOuter`/`fullOuter`の2択になりますが、DV有効側は`isMatchedOnly`・`notMatchedBySourceClauses`・`notMatchedClauses`の3つの条件を順に見ていくことで、4種類のジョインを使い分けています。
 
 ### DVが無効の場合
@@ -256,9 +252,7 @@ val joinType = if (writeUnmodifiedRows) {
 | `WHEN MATCHED`句しかない | `Right Outer` |
 | それ以外（`NOT MATCHED`や`NOT MATCHED BY SOURCE`を含む） | `Full Outer` |
 
-![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
-
-![Full Outer Joinのベン図。ソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/full-outer-join.png)
+![Right Outer JoinとFull Outer Joinのベン図。Right Outerはターゲット全体、Full Outerはソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-off-join-types.png)
 
 DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。未変更行は「該当する`WHEN`句がないのでそのままコピー」としてジョイン結果に含まれます。これが、DV無効時にファイル全体を書き直す動作の正体です。
 
@@ -288,13 +282,7 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 | `WHEN NOT MATCHED`句がない | `Right Outer` |
 | それ以外（全ての節がある） | `Full Outer` |
 
-![Inner Joinのベン図。ソースとターゲットが重なる部分だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/inner-join.png)
-
-![Left Outer Joinのベン図。ソース全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/left-outer-join.png)
-
-![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
-
-![Full Outer Joinのベン図。ソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/full-outer-join.png)
+![Inner Join、Left Outer Join、Right Outer Join、Full Outer Joinのベン図。左上がInner、右上がLeft Outer、左下がRight Outer、右下がFull Outer](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-on-join-types.png)
 
 書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
 
