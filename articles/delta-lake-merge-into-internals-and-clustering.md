@@ -141,13 +141,23 @@ if (filesToRewrite.nonEmpty) {
 
 ### 具体例：フェーズ1のジョイン結果
 
-target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、`WHEN NOT MATCHED BY SOURCE`句の有無ごとにジョイン結果へ残る行は次のようになります。
+target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン結果へ残る行は次のようになります。
 
-| user_id | target | source | `WHEN NOT MATCHED BY SOURCE`句がない（`joinType = inner`） | `WHEN NOT MATCHED BY SOURCE`句がある（`joinType = right_outer`） |
-|---|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHED） | 残る（MATCHED） |
-| 2 | - | ○ | 残らない | 残らない |
-| 3 | ○ | - | 残らない | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
+**`WHEN NOT MATCHED BY SOURCE`句がない（`joinType = inner`）**
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHED） |
+| 2 | - | ○ | 残らない |
+| 3 | ○ | - | 残らない |
+
+**`WHEN NOT MATCHED BY SOURCE`句がある（`joinType = right_outer`）**
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHED） |
+| 2 | - | ○ | 残らない |
+| 3 | ○ | - | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
 
 `WHEN NOT MATCHED BY SOURCE`句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
 
