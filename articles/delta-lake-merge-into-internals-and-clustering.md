@@ -186,7 +186,7 @@ val joinToFindTouchedFiles =
   sourceDF.join(targetDF, Column(condition), joinType)
 ```
 
-`notMatchedBySourceClauses.isEmpty`のときだけ`getTargetOnlyPredicates(spark)`（`ON`句のうちターゲット単独で評価できる条件、例えば`t.event_date = DATE'2026-01-05'`）で`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングが行われます。`NOT MATCHED BY SOURCE`句があると事前にファイルを除外できず、全ファイルが対象になります。
+`getTargetOnlyPredicates(spark)`は`ON`句のうちターゲット単独で評価できる条件（例えば`t.event_date = DATE'2026-01-05'`）を取り出す関数で、`notMatchedBySourceClauses.isEmpty`のときだけこれを使って`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングが行われます。
 
 <!-- TODO(画像・優先度高): target 1,3 / source 1,2 のベン図的な図。MATCHED/NOT MATCHED/NOT MATCHED BY SOURCEの重なりを視覚化し、Inner/Right Outerでどの行が結果に残るかを一目でわかるようにする -->
 
