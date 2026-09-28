@@ -51,7 +51,7 @@ MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table_name [target_alias]
 
 CDCパイプラインであれば「今回のバッチで届いた変更差分」、Upsertバッチであれば「最新の状態を持つ外部テーブル」がソーステーブルにあたり、`ON merge_condition`で指定したキーで既存のテーブル（ターゲットテーブル）の各行と突き合わせて、`WHEN`句に応じた`UPDATE`/`DELETE`/`INSERT`を行います。
 
-3種類の`WHEN`句があり、どれを書くか・書かないかの組み合わせによってMERGEの意味、そして内部で使われるジョイン戦略が変わります。この対応関係は紛らわしいので、次の章で先に整理しておきます。
+3種類の`WHEN`句があり、どれを書くか・書かないかの組み合わせによってMERGEの意味、そして内部で使われるジョイン戦略が変わります。
 
 # MERGE INTOの内部動作の詳細
 
@@ -66,17 +66,16 @@ Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob
 | `source` | 今回のバッチ・差分のデータ |
 | `target` | 更新される側のデータ |
 
-内部のコードは一貫して`sourceDF.join(targetDF, condition, joinType)`という書き方をしています。`.join()`を呼ぶ側（ドットの前）が`left`、引数に渡す側が`right`です。つまり`left = source`、`right = target`という対応になります。「`s`ourceは`l`eft、`t`argetは`r`ight」とアルファベットの並びで覚えると混同しにくくなります。
+内部のコードは一貫して`sourceDF.join(targetDF, condition, joinType)`という書き方をしています。`.join()`を呼ぶ側（ドットの前）が`left`、引数に渡す側が`right`です。つまり`left = source`、`right = target`という対応になります。
 
 `WHEN`句の名前も紛らわしいので、あわせて整理します。
-
 | 句 | 実際にどの行を指すか | 主なアクション |
 |---|---|---|
 | `WHEN MATCHED` | sourceとtargetの**両方**に存在する行 | UPDATE / DELETE |
 | `WHEN NOT MATCHED`（`BY SOURCE`なし） | **source**にしかない行（新しく届いた行） | INSERT |
-| `WHEN NOT MATCHED BY SOURCE` | **target**にしかない行（もう届かなくなった行） | UPDATE / DELETE |
+| `WHEN NOT MATCHED BY SOURCE` | **target**にしかない行（過去に届いた行） | UPDATE / DELETE |
 
-`NOT MATCHED BY SOURCE`は「ソースによってマッチされない」という意味で、主語はtargetの行です。`BY SOURCE`が付いている方が指している行はtarget側にしかない行になる、という点が直感に反して混同しやすいポイントです。「`NOT MATCHED`（無印）はINSERT用の新規行、`BY SOURCE`が付いたらtargetのお片付け用」と覚えておくと区別しやすくなります。
+`NOT MATCHED BY SOURCE`は「ソースによってマッチされない」という意味で、主語はtargetの行です。
 
 ## フェーズで見るMERGE INTOの内部動作
 
@@ -107,6 +106,11 @@ flowchart TB
     end
 
     P1 --> P2
+
+    classDef dataNode fill:#dbe9ff,stroke:#3b6fbf,color:#1a2b4d
+    classDef processNode fill:#ffe6c7,stroke:#c9791a,color:#4d2e00
+    class S1,T1,F1,S2,W dataNode
+    class J1,J2 processNode
 ```
 
 <!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする。この後の「フェーズ1のジョイン種別」「フェーズ2のジョイン種別」の各見出し直下にも、それぞれのフェーズだけを抜き出した図を追加するとよい -->
