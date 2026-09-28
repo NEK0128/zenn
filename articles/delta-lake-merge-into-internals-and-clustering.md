@@ -153,6 +153,8 @@ target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン
 | 2 | - | ○ | 残らない |
 | 3 | ○ | - | 残らない |
 
+![Inner Joinのベン図。ソースとターゲットが重なる部分だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/inner-join.png)
+
 **`WHEN NOT MATCHED BY SOURCE`句がある（`joinType = right_outer`）**
 
 | user_id | target | source | ジョイン結果 |
@@ -160,6 +162,8 @@ target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン
 | 1 | ○ | ○ | 残る（MATCHED） |
 | 2 | - | ○ | 残らない |
 | 3 | ○ | - | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
+
+![Right Outer Joinのベン図。ターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/right-outer-join.png)
 
 `WHEN NOT MATCHED BY SOURCE`句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
 
@@ -187,8 +191,6 @@ val joinToFindTouchedFiles =
 ```
 
 `getTargetOnlyPredicates(spark)`は`ON`句のうちターゲット単独で評価できる条件（例えば`t.event_date = DATE'2026-01-05'`）を取り出す関数で、`notMatchedBySourceClauses.isEmpty`のときだけこれを使って`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングが行われます。
-
-<!-- TODO(画像・優先度高): target 1,3 / source 1,2 のベン図的な図。MATCHED/NOT MATCHED/NOT MATCHED BY SOURCEの重なりを視覚化し、Inner/Right Outerでどの行が結果に残るかを一目でわかるようにする -->
 
 ## フェーズ2：DV（Deletion Vectors）無効と有効の違い
 
