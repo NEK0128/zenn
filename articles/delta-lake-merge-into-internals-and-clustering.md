@@ -141,15 +141,15 @@ if (filesToRewrite.nonEmpty) {
 
 ### 具体例：フェーズ1のジョイン結果
 
-target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、`joinType`ごとにジョイン結果へ残る行は次のようになります。
+target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、`WHEN NOT MATCHED BY SOURCE`句の有無ごとにジョイン結果へ残る行は次のようになります。
 
-| user_id | target | source | `joinType = inner` | `joinType = right_outer` |
+| user_id | target | source | 句がない（`joinType = inner`） | 句がある（`joinType = right_outer`） |
 |---|---|---|---|---|
 | 1 | ○ | ○ | 残る（MATCHED） | 残る（MATCHED） |
 | 2 | - | ○ | 残らない | 残らない |
 | 3 | ○ | - | 残らない | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
 
-`right_outer`だと`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
+句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなります（全ファイルが候補になる）。
 
 実際のコードでは、ジョインの前に事前のファイル絞り込みが入ります。
 
