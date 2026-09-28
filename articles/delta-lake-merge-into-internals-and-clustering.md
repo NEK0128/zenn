@@ -269,7 +269,7 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ![Full Outer Joinのベン図。ソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/full-outer-join.png)
 
-書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイル（該当ファイル内のどの行が無効化されたかを記録するサイドカーファイル）に書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
+書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された「事実」は既存ファイルを書き直さずに新規のDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
 
 **具体例**
 
@@ -305,16 +305,9 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ## 特殊ケース：Insert-only MERGE
 
-`WHEN NOT MATCHED THEN INSERT`だけを持つMERGE（重複行があれば無視して新規行だけ追加する、CDC/Upsertでよくあるパターン）は特別扱いされます。フェーズ1のジョインは`Left Anti`になり、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記（append）で完結します。
+`WHEN NOT MATCHED THEN INSERT`だけを持つMERGEは特別扱いされます。フェーズ1のジョインは`Left Anti`になり、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記（append）で完結します。
 
-```mermaid
-flowchart LR
-    S["ソーステーブル"] --> LA{{"Left Anti Join\n(merge_condition)"}}
-    T["ターゲットテーブル"] --> LA
-    LA -->|"ターゲットに存在しない行のみ"| INS["新規ファイルとして追記"]
-```
-
-<!-- TODO(画像・優先度低): 上記Mermaid図をFigmaの図に差し替える -->
+![Insert-only MERGEの処理フロー。ソーステーブルとターゲットテーブルをLeft Anti Joinし、ターゲットに存在しない行だけを新規ファイルとして追記する](/images/delta-lake-merge-into-internals-and-clustering/insert-only-merge-flow.png)
 
 ## Z-orderやLiquid Clusteringとの関係
 
