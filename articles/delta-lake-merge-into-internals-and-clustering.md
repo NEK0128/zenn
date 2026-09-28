@@ -219,7 +219,7 @@ DV無効は未変更行も含める必要があるためジョインが広め（
 | 読む範囲 | テーブル全体| フェーズ1が特定した対象ファイルのみ |
 | 目的 | 「どのファイルが対象になり得るか」を判定する | 対象ファイルの中身を実際に書き直すため、行ごとの値を計算する |
 
-`writeAllChanges`（`ClassicMergeExecutor.scala`）のジョイン種別決定部分を単純化すると、次のようになっています。
+`writeAllChanges`のジョイン種別決定部分を単純化すると、次のようになっています。
 
 ```scala
 val joinType = if (writeUnmodifiedRows) {
@@ -243,7 +243,7 @@ val joinType = if (writeUnmodifiedRows) {
 }
 ```
 
-`writeUnmodifiedRows`は、前述の`shouldWritePersistentDeletionVectors`の結果がそのまま渡ってくる引数です。DV無効時は`true`（未変更行も書き込む）、DV有効時は`false`（未変更行は書かない）になります。DV無効側は`isMatchedOnly`（`WHEN MATCHED`句しかないか）だけで`rightOuter`/`fullOuter`の2択になりますが、DV有効側は`isMatchedOnly`・`notMatchedBySourceClauses`・`notMatchedClauses`の3つの条件を順に見ていくことで、4種類のジョインを使い分けています。
+`writeUnmodifiedRows`は、前述の`shouldWritePersistentDeletionVectors`の結果がそのまま渡ってくる引数です。DV無効時は`true`、DV有効時は`false`になります。DV無効側は`isMatchedOnly`（`WHEN MATCHED`句しかないか）だけで`rightOuter`/`fullOuter`の2択になりますが、DV有効側は`isMatchedOnly`・`notMatchedBySourceClauses`・`notMatchedClauses`の3つの条件を順に見ていくことで、4種類のジョインを使い分けています。
 
 ### DVが無効の場合
 
@@ -254,7 +254,7 @@ val joinType = if (writeUnmodifiedRows) {
 
 ![Right Outer JoinとFull Outer Joinのベン図。Right Outerはターゲット全体、Full Outerはソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-off-join-types.png)
 
-DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。未変更行は「該当する`WHEN`句がないのでそのままコピー」としてジョイン結果に含まれます。これが、DV無効時にファイル全体を書き直す動作の正体です。
+DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。これが、DV無効時にファイル全体を書き直す動作の正体です。
 
 **具体例**
 
