@@ -192,7 +192,7 @@ val joinToFindTouchedFiles =
 
 `getTargetOnlyPredicates(spark)`は`ON`句のうちターゲット単独で評価できる条件（例えば`t.event_date = DATE'2026-01-05'`）を取り出す関数で、`notMatchedBySourceClauses.isEmpty`のときだけこれを使って`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングが行われます。
 
-## フェーズ2：DV（Deletion Vectors）無効と有効の違い
+## フェーズ2：DV無効と有効の違い
 
 Deltaのファイルは一度書いたら中身を直接書き換えられません。1行だけ`UPDATE`するときも、選択肢は次の2つです。
 
@@ -203,7 +203,7 @@ Deltaのファイルは一度書いたら中身を直接書き換えられませ
 
 DELETEの例で見ると、この違いがより直感的にわかります。
 
-![DV OFF（左）とDV ON（右）でのDELETE処理の違い。DV OFFはファイルを丸ごと書き直すが、DV ONは対象行をDVファイルに記録するだけで既存ファイルを書き直さない](/images/delta-lake-merge-into-internals-and-clustering/dv-off-vs-on-delete.png)
+![DV無効（左）と有効（右）でのDELETE処理の違い。無効な場合はファイルを丸ごと書き直すが、有効な場合は対象行をDVファイルに記録するだけで既存ファイルを書き直さない](/images/delta-lake-merge-into-internals-and-clustering/dv-off-vs-on-delete.png)
 *出典: Omar LARAQUI, "[Optimizing PySpark Workloads with Deletion Vectors in Databricks: A Comprehensive Guide](https://blog.dataengineerthings.org/optimizing-pyspark-workloads-with-deletion-vectors-in-databricks-a-comprehensive-guide-99f37a583a23)" (Data Engineer Things)*
 
 ## フェーズ2のジョイン種別
@@ -269,7 +269,7 @@ Liquid Clusteringも、[Low shuffle merge](https://learn.microsoft.com/en-us/azu
 
 - `MERGE INTO`は「対象ファイルを絞り込むジョイン」→「書き込み内容を計算するジョインと書き込み」の2フェーズ構成。ジョイン種別は`WHEN`句の組み合わせとDVの有効・無効で機械的に決まる。
 - Insert-only MERGEは`Left Anti`ジョインになり、既存ファイルを一切書き換えない。
-- DV有効なら変更対象の行だけを新規ファイルに書けばよく、DV無効なら該当ファイルを丸ごと書き直すCopy-on-Write方式になる。
+- DV有効なら変更対象の行だけを新規ファイルに書けばよく、無効なら該当ファイルを丸ごと書き直すCopy-on-Write方式になる。
 - Z-orderやLiquid Clusteringによるデータスキッピングは、ソース側の絞り込み条件が狭いことを前提にした最適化であり、`ON`句にパーティション列などの絞り込み条件を明示しない限り十分に効かないことがある。
 
 # 参考リンク
