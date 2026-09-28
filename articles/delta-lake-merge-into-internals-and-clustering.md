@@ -13,8 +13,8 @@ publication_name: "ivry"
 先日、青森で開催された「あおもりビリヤードチャリティトーナメント」に参加してきました。
 51名が参加する大会で、決勝まで勝ち上がったものの、最後は一歩及ばず準優勝でした。
 
-![あおもりビリヤードチャリティトーナメントの表彰式。左が筆者で準優勝の賞状を手にしている](/images/delta-lake-merge-into-internals-and-clustering/tournament.png)
-*あおもりビリヤードチャリティトーナメントの表彰式にて。左が筆者です*
+![あおもりビリヤードチャリティトーナメントの表彰式。準優勝の賞状を手にしている筆者](/images/delta-lake-merge-into-internals-and-clustering/tournament.png)
+*あおもりビリヤードチャリティトーナメントの表彰式にて*
 
 ビリヤードの小話はここまでにして、今回はDelta Lakeの`MERGE INTO`についてお話しします。
 
