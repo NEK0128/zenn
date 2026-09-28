@@ -102,15 +102,15 @@ flowchart TB
         S2["ソーステーブル\n(left)"]
         F1 --> J2{{"Join #2\n(merge_condition)"}}
         S2 --> J2
-        J2 --> W["ターゲットテーブルへ書き込み"]
+        J2 --> W{{"ターゲットテーブルへ書き込み"}}
     end
 
     P1 --> P2
 
     classDef dataNode fill:#dbe9ff,stroke:#3b6fbf,color:#1a2b4d
     classDef processNode fill:#ffe6c7,stroke:#c9791a,color:#4d2e00
-    class S1,T1,F1,S2,W dataNode
-    class J1,J2 processNode
+    class S1,T1,F1,S2 dataNode
+    class J1,J2,W processNode
 ```
 
 <!-- TODO(画像・優先度中): 上記Mermaid図をFigmaの図に差し替える。left/rightどちらがsource/targetか、target/sourceのテーブル→ジョイン→対象ファイル特定の流れが一目でわかる図にする。この後の「フェーズ1のジョイン種別」「フェーズ2のジョイン種別」の各見出し直下にも、それぞれのフェーズだけを抜き出した図を追加するとよい -->
