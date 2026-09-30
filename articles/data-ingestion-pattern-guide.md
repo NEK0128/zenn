@@ -9,27 +9,26 @@ publication_name: "ivry"
 
 こんにちは、IVRyでデータエンジニアとして働いている松田健司（[@ken_3ba](https://x.com/ken_3ba)）です。趣味はビリヤードで、プロの試合にも出ているぐらい割とガチでやっています。
 
-最近シャフト(キューの上半分の部分)を新調し、木に色を入れた7色のカラフルなデザインのUNLIMITEDのシャフトがあるのですが、結局いちばん無難な黒を選びました。
+最近シャフト(キューの上半分の部分)を新調しました。木に色を入れた7色のカラフルなデザインのUNLIMITEDのシャフトがあるのですが、結局いちばん無難な黒を選びました。
 
 ![染め技のカラフルなシャフト](/images/data-ingestion-pattern-guide/shaft.png)
 *7色のシャフト。*
 
-ビリヤードの話はこのへんにして、本題に入ります。
-今回はデータの取り込み方法についての整理とどういうときにどの技術を選ぶのかについてまとめました。
+ビリヤードの話はこのへんにして、本題に入ります。今回はデータの取り込み方法について整理し、どういうときにどの技術を選ぶのかをまとめました。
 
 # TL;DR
 
 - RDS・S3・APIなどからデータを取り込む方式を「ゼロコピー」「Change Data Capture(CDC)」「Create or Replace」「クエリベースの増分更新」の4つに整理します
 - テーブルの性質(トランザクション系の大規模テーブルか、マスタ系の小規模テーブルか)から逆引きして選べる判断基準をまとめます
-- Databricksでの実現手段(Lakehouse Federation、Lakeflow Connect、Auto CDC)にも軽く触れます
+- 各方式をDatabricksで実現する場合の機能(Lakehouse Federation、Lakeflow Connect、Auto CDC)にも触れます
 
 # はじめに
-あまりデータエンジニアリングについて経験ない人から「データをDWHに取り込みたいのですが、どうすればいいですか？」と聞かれることがありました。答えるにあたり色々なパターンが存在し、要件によって選択する技術がかわります。
 
-例えば、データソースがRDSから取るのか、S3から取るのか、APIから取るのかによって選択肢は変わります。
-さらに同じRDSでも、全件洗い替え・差分抽出・リアルタイムに近い反映のどれが必要かによって、適した技術はまったく違います。
+あまりデータエンジニアリングの経験がない方から「データをDWHに取り込みたいのですが、どうすればいいですか？」と聞かれることがありました。答えるにあたり色々なパターンが存在し、要件によって選択する技術が変わります。
 
-この記事では、データ取り込み方法について整理します。データエンジニアリングの経験がある方には知っている話かもしれませんが、判断基準を言語化して残しておくことで、新しくチームに入った方への説明や、自分自身の意思決定の見直しの参考になると幸いです。
+例えば、データソースがRDSなのか、S3なのか、APIなのかによって選択肢は変わります。さらに同じRDSでも、全件洗い替え・差分抽出・リアルタイムに近い反映のどれが必要かによって、適した技術はまったく違います。
+
+この記事では、データ取り込み方法について整理します。データエンジニアリングの経験がある方には目新しい話は少ないかもしれませんが、判断基準を言語化して残しておくことで、新しくチームに入った方への説明や、自分自身の意思決定の見直しに使えるようにするのが狙いです。
 
 # 取得方式で考える：何を・どう取ってくるか
 
@@ -46,7 +45,7 @@ publication_name: "ivry"
 
 ## ゼロコピー
 
-ソースのデータをコピーせず、クエリ実行時にソース側へアクセスして直接参照する方式です。Databricksの[Lakehouse Federation](https://docs.databricks.com/aws/en/query-federation)のように、外部DBをUnity Catalog経由で仮想的に見せる仕組みが代表例です。
+ソースのデータをコピーせず、クエリ実行時にソース側へアクセスして直接参照する方式です。Databricksでは[Lakehouse Federation](https://docs.databricks.com/aws/en/query-federation)が代表例で、外部DBをコピーせずUnity Catalog経由で仮想的に見せられます。
 
 直接DWHにコピーが存在しないため、ETLジョブや取り込み用バケット自体が不要になります。さらにソース側でテーブルやスキーマが追加されても自動で追従するため、開発・運用コストとストレージコストを大きく下げられます。ソースをそのまま参照するのでリアルタイム性も確保できます。
 
@@ -62,7 +61,7 @@ https://zenn.dev/ivry/articles/databricks-lakehouse-federation-guide
 
 一方で、ログ基盤の構築・監視やスキーマ変更への追従が必要で、実装・運用コストは4方式の中でもっとも高くなります。パフォーマンスチューニングの難易度が高いことや、失敗時の再実行が他の方式より難しいことも実務上のハードルです。
 
-Databricksでは[Auto CDC](https://docs.databricks.com/aws/en/dlt-ref/dlt-python-ref-apply-changes)(旧`APPLY CHANGES`)を使うことで、順序保証や重複排除、スキーマ変更への追従を宣言的に扱えます。パイプラインを[Continuousモード](https://docs.databricks.com/gcp/en/ldp/pipeline-mode)で起動すれば、数十秒から数分間隔での反映も可能です。
+Databricksでは、このハードルをマネージドで下げる手段が2つ用意されています。[Lakeflow Connect](https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/)はCDCを含む取り込みをコネクタの設定だけで構築できる機能で、自前でログ基盤を組む前にまず検討する価値があります。自前でパイプラインを組む場合も、[Auto CDC](https://docs.databricks.com/aws/en/dlt-ref/dlt-python-ref-apply-changes)(旧`APPLY CHANGES`)を使えば順序保証や重複排除、スキーマ変更への追従を宣言的に扱えます。パイプラインを[Continuousモード](https://docs.databricks.com/gcp/en/ldp/pipeline-mode)で起動すれば、数十秒から数分間隔での反映も可能です。
 
 ## Create or Replace(全件洗い替え)
 
@@ -96,16 +95,6 @@ https://zenn.dev/ivry/articles/delta-lake-merge-into-internals-and-clustering
 - **データ量が大きく、更新日時カラムで差分抽出ができる** → クエリベースの増分更新
 - **ジョブ自体を持ちたくない、社内利用でソースの最新値をそのまま参照できればよい** → ゼロコピー
 - **外部連携や本番のプロダクト機能として使いたい** → Create or Replace、クエリベースの増分更新、CDCのいずれか(ゼロコピーは避ける)
-
-# Databricksではどうなるか
-
-Databricksには、これらの取得方式を自前実装せずに使える機能が用意されています。
-
-- **[Lakehouse Federation](https://docs.databricks.com/aws/en/query-federation)**: ゼロコピー方式をUnity Catalog経由で実現する機能です。外部DBをコピーせず直接クエリできます
-- **[Lakeflow Connect](https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/)**: CDCやAPI連携を含む取り込みをマネージドで提供する機能です。コネクタを設定するだけで増分更新やCDCベースの取り込みが構築できます
-- **[Auto CDC](https://docs.databricks.com/aws/en/dlt-ref/dlt-python-ref-apply-changes)**: 自前でCDCパイプラインを組む場合、順序保証や重複排除、スキーマ変更への追従を宣言的に扱えます
-
-自前でCDC基盤やジョブを組む前に、これらのマネージドな選択肢で要件を満たせないかをまず検討するとよいでしょう。
 
 # まとめ
 
