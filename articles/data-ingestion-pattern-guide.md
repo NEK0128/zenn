@@ -48,18 +48,22 @@ publication_name: "ivry"
 | 分類 | ゼロコピー | ストリーム連携 | バッチ連携 | バッチ連携 |
 | リアルタイム性 | 高い(常にソースの最新値) | ニアリアルタイム(短くても数十秒〜数分間隔が限界) | 低い(日次・時間次が一般的) | 中程度(短くても数十秒〜数分間隔が限界) |
 | 適したデータ量 | 小〜中規模 | 大規模 | 小〜中規模 | 中〜大規模 |
-| コスト | ストレージ:ほぼなし(複製を持たない)、コンピュート:参照の都度発生 | ストレージ:変更履歴の複製分、コンピュート:実行頻度に依存(常時稼働なら高い) | ストレージ:全件の複製分でもっとも大きい、コンピュート:実行頻度に依存 | ストレージ:差分の複製分で小さい、コンピュート:実行頻度に依存 |
+| コスト | 低い(ストレージ・取り込みジョブのコストはなし) | 高い(ストレージコストが発生し、常時稼働ならジョブのコストも高い) | 中(ストレージコストが発生し、実行頻度に応じてジョブのコストがかかる) | 中(ストレージコストが発生し、実行頻度に応じてジョブのコストがかかる) |
 | ソース側の負荷 | 高(クエリのたびに発生) | 低(ログ読み取りのみ) | 高(全件スキャン) | 中(差分抽出クエリ) |
 | 実装難易度 | 低 | 高 | 低 | 中 |
 | 運用コスト(保守性) | 低(構成がシンプルで運用しやすい) | 高(ログ基盤の監視が必要) | 低(シンプルで運用しやすい) | 中 |
-| 拡張性 | 低(ソース側の制約を受ける) | 高 | 中 | 中 |
-| UPDATE/DELETEの検知 | 可能(ソースを直接参照するため) | 可能 | 可能(全件洗い替えのため) | UPDATEは可能、DELETEは不可(物理削除はDWH側に残り続ける) |
-| データの持ち方 | ソース側のみ(複製なし) | 複製あり | 複製あり(全件) | 複製あり(差分) |
-| Databricksの機能でいうと | [Lakehouse Federation](https://docs.databricks.com/aws/en/query-federation) | [Lakeflow Connect](https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/)、[Auto CDC](https://docs.databricks.com/aws/en/dlt-ref/dlt-python-ref-apply-changes) | [Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`CREATE OR REPLACE`(パーティション単位なら`REPLACE WHERE`)を定期実行 | [Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`MERGE INTO`を定期実行 |
+| UPDATE/DELETE | 最新の状態が反映されるが履歴をもたない | 最新の状態が反映され、履歴も取れる | 最新の状態が反映されるが履歴をもたない | UPDATEは反映可能だがDELETEは不可 |
+| Databricksの機能 | [Lakehouse Federation](https://docs.databricks.com/aws/en/query-federation) | [Lakeflow Connect](https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/)、[Auto CDC](https://docs.databricks.com/aws/en/dlt-ref/dlt-python-ref-apply-changes) | [Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`CREATE OR REPLACE`(パーティション単位なら`REPLACE WHERE`)を定期実行 | [Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`MERGE INTO`を定期実行 |
 
 ## ゼロコピー
 
 ソースのデータをコピーせず、クエリ実行時にソース側へアクセスして直接参照する方式です。Databricksでは[Lakehouse Federation](https://docs.databricks.com/aws/en/query-federation)が代表例で、外部DBをコピーせずUnity Catalog経由で仮想的に見せられます。
+
+```mermaid
+graph LR
+    A[ソースDB] -->|クエリの都度アクセス| B[Unity Catalog]
+    B -->|仮想的なView| C[利用者・BIツール]
+```
 
 直接DWHにコピーが存在しないため、ETLジョブや取り込み用バケット自体が不要になります。さらにソース側でテーブルやスキーマが追加されても自動で追従するため、開発・運用コストとストレージコストを大きく下げられます。ソースをそのまま参照するのでリアルタイム性も確保できます。
 
@@ -70,6 +74,13 @@ https://zenn.dev/ivry/articles/databricks-lakehouse-federation-guide
 ## Change Data Capture(CDC)
 
 ソースDBのトランザクションログ(PostgreSQLのWAL、MySQLのbinlogなど)を読み取り、INSERT/UPDATE/DELETEの変更差分を検知して反映する方式です。ソース側のテーブルに更新の痕跡(`updated_at`など)がなくても、変更を取りこぼさず追跡できるのが最大の強みです。
+
+```mermaid
+graph LR
+    A[ソースDB] -->|変更差分| B[トランザクションログ<br/>WAL・binlogなど]
+    B -->|継続的に読み取り| C[CDCパイプライン]
+    C -->|変更を反映| D[DWH]
+```
 
 CDC自体は変更ログを検知する手法であり、それ自体がリアルタイム性を保証するわけではありません。捕捉した変更をどのくらいの頻度で反映するパイプラインとして動かすかによって、ニアリアルタイムにもバッチにもなります。実務ではストリームパイプライン(常時稼働)で運用し、ニアリアルタイムを狙うケースが大半です。
 
@@ -85,6 +96,12 @@ Databricksでは、このハードルをマネージドで下げる手段が2つ
 
 ソースの全件を取得し、既存テーブルをまるごと置き換える方式です。実装がもっともシンプルで、ソース側に更新日時カラムがなくても使えます。冪等性も担保しやすく、失敗時は単純に再実行すればよいという扱いやすさがあります。
 
+```mermaid
+graph LR
+    A[ソースDB] -->|全件抽出| B[定期実行ジョブ]
+    B -->|CREATE OR REPLACE| C[DWH]
+```
+
 一方で、データ量に比例して転送・処理コストが増えるため、大規模テーブルには不向きです。またソース側の値がすでに書き換わっていると、洗い替えのタイミングによっては過去時点のスナップショットが失われる点に注意が必要です。マスタテーブルなど、変更頻度が低くレコード数が少ないデータに向いた方式です。
 
 テーブル全体ではなく、日付パーティションなど対象範囲を絞って洗い替える変種もあります。全件洗い替えほどコストがかからず、直近数日分だけ再取得したいといったユースケースに向いています。
@@ -94,6 +111,12 @@ Databricksでは、このハードルをマネージドで下げる手段が2つ
 ## クエリベースの増分更新
 
 `updated_at`や連番の`id`など、更新を判定できるカラムを使って差分だけを抽出し、追記または更新する方式です。全件取得よりも転送量を抑えられ、CDCほどの実装コストもかかりません。バッチジョブとして定期実行するのが基本で、CDCのようなストリーム処理ではないため、実行間隔を短くしても数十秒〜数分単位のニアリアルタイムが限界です。
+
+```mermaid
+graph LR
+    A[ソースDB] -->|updated_at等で差分抽出| B[定期実行ジョブ]
+    B -->|MERGE INTO| C[DWH]
+```
 
 制約として、物理削除(DELETE)を検知できません。ソース側でレコードが削除されても、その情報は更新日時カラムに現れないため、DWH側には削除前のレコードが残り続けます。また、ソース側に更新日時カラムがそもそもない場合は使えません。アプリケーション側で更新日時カラムの更新を忘れる実装ミスがあると、その行だけ差分抽出から漏れるというデータ品質上のリスクもあります。
 
@@ -115,6 +138,19 @@ https://zenn.dev/ivry/articles/delta-lake-merge-into-internals-and-clustering
 - **データ量が大きく、更新日時カラムで差分抽出ができる** → クエリベースの増分更新
 - **ジョブ自体を持ちたくない、社内利用でソースの最新値をそのまま参照できればよい** → ゼロコピー
 - **外部連携や本番のプロダクト機能として使いたい** → Create or Replace、クエリベースの増分更新、CDCのいずれか(ゼロコピーは避ける)
+
+上記をフローチャートにすると、次のようになります。
+
+```mermaid
+flowchart TD
+    A[取得方式を選ぶ] --> B{ジョブを持たず<br/>社内利用でソースの<br/>最新値を見たいだけ?}
+    B -->|はい| C[ゼロコピー]
+    B -->|いいえ<br/>外部連携・本番利用| D{更新日時カラムがない<br/>または削除も<br/>正確に検知したい?}
+    D -->|はい| E[CDC]
+    D -->|いいえ| F{データ量は?}
+    F -->|小さい・マスタ系| G[Create or Replace]
+    F -->|大きい| H[クエリベースの増分更新]
+```
 
 # まとめ
 
