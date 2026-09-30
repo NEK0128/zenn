@@ -55,6 +55,7 @@ publication_name: "ivry"
 | 拡張性 | 低(ソース側の制約を受ける) | 高 | 中 | 中 |
 | UPDATE/DELETEの検知 | 可能(ソースを直接参照するため) | 可能 | 可能(全件洗い替えのため) | UPDATEは可能、DELETEは不可(物理削除はDWH側に残り続ける) |
 | データの持ち方 | ソース側のみ(複製なし) | 複製あり | 複製あり(全件) | 複製あり(差分) |
+| Databricksの機能でいうと | [Lakehouse Federation](https://docs.databricks.com/aws/en/query-federation) | [Lakeflow Connect](https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/)、[Auto CDC](https://docs.databricks.com/aws/en/dlt-ref/dlt-python-ref-apply-changes) | [Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`CREATE OR REPLACE`(パーティション単位なら`REPLACE WHERE`)を定期実行 | [Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`MERGE INTO`を定期実行 |
 
 ## ゼロコピー
 
