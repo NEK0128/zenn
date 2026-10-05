@@ -316,26 +316,6 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 | 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
 | 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
 
-## WHEN句の組み合わせ全パターンとジョイン種別
-
-ここまで`WHEN MATCHED`句しかない場合、`WHEN NOT MATCHED BY SOURCE`句がない場合など、条件を1つずつ変えながらジョイン種別を見てきました。最後に、3種類の`WHEN`句（`MATCHED` / `NOT MATCHED` / `NOT MATCHED BY SOURCE`）の有無で分かれる組み合わせを全て並べ、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別がどう決まるかを一覧にします。
-
-`MERGE INTO`は`WHEN`句を最低1つ書く必要があるため、組み合わせは2³=8通りではなく、すべて無しを除いた7通りです。
-
-| 書いた`WHEN`句 | フェーズ1 | フェーズ2（DV無効） | フェーズ2（DV有効） |
-|---|---|---|---|
-| `MATCHED` + `NOT MATCHED` + `NOT MATCHED BY SOURCE` | Right Outer | Full Outer | Full Outer |
-| `MATCHED` + `NOT MATCHED` | Inner | Full Outer | Left Outer |
-| `MATCHED` + `NOT MATCHED BY SOURCE` | Right Outer | Full Outer | Right Outer |
-| `MATCHED`のみ | Inner | Right Outer | Inner |
-| `NOT MATCHED` + `NOT MATCHED BY SOURCE` | Right Outer | Full Outer | Full Outer |
-| `NOT MATCHED`のみ | Inner | Full Outer | Left Outer |
-| `NOT MATCHED BY SOURCE`のみ | Right Outer | Full Outer | Right Outer |
-
-この表から分かるのは、`MATCHED`句を書くかどうかは、どのフェーズのジョイン種別も変えないという点です。表の1行目と5行目（`NOT MATCHED`+`NOT MATCHED BY SOURCE`の有無が同じで`MATCHED`の有無だけが違う行）を比べると、フェーズ1・フェーズ2とも完全に同じジョイン種別になっています。2行目と6行目、3行目と7行目も同様です。
-
-理由はシンプルで、前述のとおりフェーズ1のジョイン種別は`NOT MATCHED BY SOURCE`句の有無だけで決まり、フェーズ2のジョイン種別分岐も`isMatchedOnly`（`NOT MATCHED`・`NOT MATCHED BY SOURCE`がどちらも無いか）・`NOT MATCHED BY SOURCE`句の有無・`NOT MATCHED`句の有無の3つの判定だけで決まります。判定ロジック自体が`MATCHED`句の有無を直接見ていないので、結果として7パターンが実質4通りのジョイン挙動に集約されます。`WHEN`句の組み合わせを考えるときは、「`MATCHED`を書くかどうか」ではなく「`NOT MATCHED`と`NOT MATCHED BY SOURCE`をそれぞれ書くかどうか」の2択で考えると、ジョイン戦略の見通しがよくなります。
-
 ## 特殊ケース：Insert-only MERGE
 
 `WHEN NOT MATCHED THEN INSERT`だけを持つMERGEは特別扱いされます。フェーズ1のジョインは`Left Anti`になり、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記で完結します。
@@ -343,6 +323,124 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 ![Left Anti Joinのベン図。ソースにあってターゲットにない行だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/left-anti-join.png)
 
 ![Insert-only MERGEの処理フロー。ソーステーブルとターゲットテーブルをLeft Anti Joinし、ターゲットに存在しない行だけを新規ファイルとして追記する](/images/delta-lake-merge-into-internals-and-clustering/insert-only-merge-flow.png)
+
+## 構文別早見表：どのMERGE文がどのジョイン戦略になるか
+
+ここまで`WHEN`句の条件を1つずつ変えながらジョイン種別を見てきました。最後に、実際に書く`MERGE INTO`構文のパターンごとに、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別を早見表としてまとめます。
+
+`WHEN`句は最低1つ必要なので、組み合わせは次の6パターンです（`WHEN NOT MATCHED THEN INSERT`のみの構成は、前述のInsert-only MERGEとして別扱いになるためここでは除いています）。
+
+### ① UPDATEのみ（`WHEN MATCHED`のみ）
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+```
+
+既存行だけを更新する、典型的なバッチです。
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Inner |
+| フェーズ2（DV無効） | Right Outer |
+| フェーズ2（DV有効） | Inner |
+
+### ② Upsert（`WHEN MATCHED` + `WHEN NOT MATCHED`）
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *
+```
+
+もっとも使用頻度が高い、更新と挿入をまとめて行うパターンです。
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Inner |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Left Outer |
+
+### ③ 同期的UPDATE/DELETE（`WHEN MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+ソースに存在しなくなった行を削除する、スナップショット同期でよく使う形です。
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Right Outer |
+
+### ④ 完全同期（`WHEN MATCHED` + `WHEN NOT MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+ターゲットをソースの内容に完全一致させる、UPDATE/INSERT/DELETEすべてを含む構成です。
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Full Outer |
+
+### ⑤ ソース消滅行のみDELETE（`WHEN NOT MATCHED BY SOURCE`のみ）
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+UPDATEもINSERTもせず、ソースから消えた行だけを削除する構成です。
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Right Outer |
+
+### ⑥ INSERT + DELETE（`WHEN NOT MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN NOT MATCHED THEN INSERT *
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+既存行の更新はせず、新規追加と消滅行の削除だけを行う構成です。
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Full Outer |
+
+### 6パターンのまとめ
+
+| 構文パターン | `WHEN MATCHED` | `WHEN NOT MATCHED` | `WHEN NOT MATCHED BY SOURCE` | フェーズ1 | フェーズ2（DV無効） | フェーズ2（DV有効） |
+|---|---|---|---|---|---|---|
+| ① UPDATEのみ | ○ | - | - | Inner | Right Outer | Inner |
+| ② Upsert | ○ | ○ | - | Inner | Full Outer | Left Outer |
+| ③ 同期的UPDATE/DELETE | ○ | - | ○ | Right Outer | Full Outer | Right Outer |
+| ④ 完全同期 | ○ | ○ | ○ | Right Outer | Full Outer | Full Outer |
+| ⑤ ソース消滅行のみDELETE | - | - | ○ | Right Outer | Full Outer | Right Outer |
+| ⑥ INSERT + DELETE | - | ○ | ○ | Right Outer | Full Outer | Full Outer |
+
+表を縦に見ると、③と⑤、④と⑥がそれぞれ同じジョイン種別の組み合わせになっています。両ペアとも`WHEN NOT MATCHED`句の有無は揃っていて、違いは`WHEN MATCHED`句の有無だけです。つまりこの2組に関しては、`UPDATE`文を書くかどうかがジョイン種別を変えていません。
+
+一方、①（UPDATEのみ）と②（Upsert）は`WHEN MATCHED`句の有無は同じで`WHEN NOT MATCHED`句の有無だけが違うのに、フェーズ2（DV有効）のジョイン種別はInnerとLeft Outerで異なります。`WHEN NOT MATCHED`句、つまり`INSERT`を書くかどうかは、ジョイン種別に直接影響するということです。
+
+フェーズ1のジョイン種別は`WHEN NOT MATCHED BY SOURCE`句の有無だけで決まり、フェーズ2の分岐も`WHEN NOT MATCHED`・`WHEN NOT MATCHED BY SOURCE`句の有無で決まります。構文を選ぶときは「`UPDATE`を書くかどうか」よりも、「`INSERT`と`DELETE`をそれぞれ書くかどうか」のほうがジョイン戦略を左右します。
 
 ## Z-orderやLiquid Clusteringとの関係
 
