@@ -310,8 +310,8 @@ WHEN NOT MATCHED THEN INSERT *
 | 2 | - | ○（新規） | `WHEN NOT MATCHED`に該当し`INSERT` |
 | 3 | ○ | ○（変化なし） | targetにしかない行だが、該当する`WHEN`句が無いため何もしない |
 
-### ③ 同期的UPDATE/DELETE（`WHEN MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
-ソースに存在しなくなった行を削除する、スナップショット同期でよく使う形です。
+### ③ 新規行を取り込まない同期（`WHEN MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
+既存行の更新とソースに存在しなくなった行の削除だけを行い、新規行は追加しません。ターゲット側のマスタを変更せずソースの更新・削除だけ反映したいときに使う形です。
 
 ```sql
 MERGE INTO target USING source ON target.id = source.id
@@ -418,7 +418,7 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 |---|---|---|---|---|---|---|
 | ① UPDATEのみ | ○ | - | - | Inner | Right Outer | Inner |
 | ② Upsert | ○ | ○ | - | Inner | Full Outer | Left Outer |
-| ③ 同期的UPDATE/DELETE | ○ | - | ○ | Right Outer | Full Outer | Right Outer |
+| ③ 新規行を取り込まない同期 | ○ | - | ○ | Right Outer | Full Outer | Right Outer |
 | ④ 完全同期 | ○ | ○ | ○ | Right Outer | Full Outer | Full Outer |
 | ⑤ ソース消滅行のみDELETE | - | - | ○ | Right Outer | Full Outer | Right Outer |
 | ⑥ INSERT + DELETE | - | ○ | ○ | Right Outer | Full Outer | Full Outer |
