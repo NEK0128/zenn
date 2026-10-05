@@ -3,7 +3,7 @@ title: "Delta LakeのMERGE INTOをOSSコードから読み解く —— ジョ�
 emoji: "🔀"
 type: "tech"
 topics: ["Databricks", "DeltaLake", "Spark", "データエンジニアリング"]
-published: false
+published: true
 publication_name: "ivry"
 ---
 
@@ -28,7 +28,7 @@ Databricksで差分更新をしたいとき、`MERGE INTO`はDelta Lakeを使う
 
 - `MERGE INTO`は内部的に2段階のジョインで実行される。フェーズ1でファイルを絞り込み、フェーズ2で書き込み内容を計算する。
 - ジョイン種別は、`WHEN`句の組み合わせとDeletion Vectors（DV）の有効・無効で決まる。
-- Z-orderやLiquid Clusteringによるデータスキッピングは、ソース側の絞り込み条件が狭いときしか効かない。
+- Z-orderやLiquid Clusteringによるデータスキッピングは、`ON`句にターゲット側の列を使った絞り込み条件があるときしか効かない。
 
 # MERGE INTOについて
 
@@ -94,38 +94,45 @@ Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob
 実際のコード（`MergeIntoCommand.scala`）を単純化すると、全体の制御フローはおおよそ次のようになっています。
 
 ```scala
-// フェーズ1: 対象ファイルの特定
-val (filesToRewrite, deduplicateCDFDeletes) = findTouchedFiles(spark, deltaTxn)
-
-if (filesToRewrite.nonEmpty) {
-  val shouldWriteDeletionVectors =
-    shouldWritePersistentDeletionVectors(spark, deltaTxn)
-
-  if (shouldWriteDeletionVectors) {
-    // フェーズ2 (DV有効): 変更行だけを新規ファイルに書き込む
-    val newWrittenFiles = writeAllChanges(
-      spark, deltaTxn, filesToRewrite,
-      deduplicateCDFDeletes, writeUnmodifiedRows = false)
-
-    // 既存ファイル側にDeletion Vectorを書き込む
-    val dvActions = writeDVs(spark, deltaTxn, filesToRewrite)
-
-    newWrittenFiles ++ dvActions
-  } else {
-    // フェーズ2 (DV無効): 未変更行も含めて丸ごと書き直す
-    val newWrittenFiles = writeAllChanges(
-      spark, deltaTxn, filesToRewrite,
-      deduplicateCDFDeletes, writeUnmodifiedRows = true)
-
-    newWrittenFiles ++ filesToRewrite.map(_.remove)
-  }
-} else {
-  // 対象ファイルなし = Insert-onlyの高速パス
+if (isInsertOnly && spark.conf.get(MERGE_INSERT_ONLY_ENABLED)) {
+  // Insert-onlyの高速パス(1): findTouchedFilesを呼ばずにLeft Antiジョインだけで完結する
   writeOnlyInserts(spark, deltaTxn, ...)
+} else {
+  // フェーズ1: 対象ファイルの特定
+  val (filesToRewrite, deduplicateCDFDeletes) = findTouchedFiles(spark, deltaTxn)
+
+  if (filesToRewrite.nonEmpty) {
+    val shouldWriteDeletionVectors =
+      shouldWritePersistentDeletionVectors(spark, deltaTxn)
+
+    if (shouldWriteDeletionVectors) {
+      // フェーズ2 (DV有効): 変更行だけを新規ファイルに書き込む
+      val newWrittenFiles = writeAllChanges(
+        spark, deltaTxn, filesToRewrite,
+        deduplicateCDFDeletes, writeUnmodifiedRows = false)
+
+      // 既存ファイル側にDeletion Vectorを書き込む
+      val dvActions = writeDVs(spark, deltaTxn, filesToRewrite)
+
+      newWrittenFiles ++ dvActions
+    } else {
+      // フェーズ2 (DV無効): 未変更行も含めて丸ごと書き直す
+      val newWrittenFiles = writeAllChanges(
+        spark, deltaTxn, filesToRewrite,
+        deduplicateCDFDeletes, writeUnmodifiedRows = true)
+
+      newWrittenFiles ++ filesToRewrite.map(_.remove)
+    }
+  } else {
+    // Insert-onlyの高速パス(2): フェーズ1で対象ファイルが見つからなかった場合も同じ処理に合流する
+    writeOnlyInserts(spark, deltaTxn, ...)
+  }
 }
 ```
 
 `writeAllChanges`の`writeUnmodifiedRows`引数に、DVが有効か無効かがそのまま渡っているのが分かります。DV有効なら`false`（未変更行は書かない）、無効なら`true`（丸ごと書き直す）です。DV有効時のみ、`writeAllChanges`とは別に`writeDVs`が呼ばれて既存ファイル側にDeletion Vectorが書き込まれます。
+
+`writeOnlyInserts`は2箇所から呼ばれます。1つは`isInsertOnly`判定による事前分岐（`findTouchedFiles`を呼ばない）、もう1つは`findTouchedFiles`を実行した結果、対象ファイルが1件も見つからなかった場合です。前者が本来のInsert-only MERGEの高速パスで、詳細は後述の「特殊ケース：Insert-only MERGE」で説明します。
 
 ## フェーズ1：対象ファイルの特定
 
@@ -134,7 +141,7 @@ if (filesToRewrite.nonEmpty) {
 
 `findTouchedFiles`は、`WHEN NOT MATCHED BY SOURCE`句の有無でこのジョインの種別を切り替えます。
 
-| 条件 | ジョイン種別 | Z-orderによる事前スキッピング |
+| 条件 | ジョイン種別 | 事前のデータスキッピング |
 |---|---|---|
 | `WHEN NOT MATCHED BY SOURCE`句がある | `Right Outer` | 効かない（全ファイルが対象） |
 | `WHEN NOT MATCHED BY SOURCE`句がない | `Inner` | 効く（`ON`句のターゲット単独条件で絞り込み） |
@@ -142,14 +149,14 @@ if (filesToRewrite.nonEmpty) {
 ![Inner JoinとRight Outer Joinのベン図。Innerはソースとターゲットが重なる部分だけ、Right Outerはターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase1-join-types.png)
 
 `NOT MATCHED BY SOURCE`は「ソースにマッチしなかったターゲット行」を処理対象にする句です。
-`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。`WHEN NOT MATCHED BY SOURCE`句がある場合、ターゲットにしかない行もジョイン結果に残すため、そのぶん事前のZ-orderスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります（具体例は後述の「構文別早見表」で、実際のMERGE文のパターンごとに確認できます）。
+`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。`WHEN NOT MATCHED BY SOURCE`句がある場合、ターゲットにしかない行もジョイン結果に残すため、そのぶん事前のデータスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります（具体例は後述の「構文別早見表」で、実際のMERGE文のパターンごとに確認できます）。
 
 実際のコードでは、ジョインの前に事前のファイル絞り込みが入ります。
 
 ```scala
 val dataSkippedFiles =
   if (notMatchedBySourceClauses.isEmpty) {
-    // ON句のうちターゲット単独で判定できる条件で、Z-order統計を使って絞り込む
+    // ON句のうちターゲット単独で判定できる条件で、min/max統計を使って絞り込む
     deltaTxn.filterFiles(getTargetOnlyPredicates(spark), keepNumRecords = true)
   } else {
     // 常にtrueの条件を渡す = 実質フィルタなし。全ファイルが対象のまま残る
@@ -167,7 +174,7 @@ val joinToFindTouchedFiles =
   sourceDF.join(targetDF, Column(condition), joinType)
 ```
 
-`notMatchedBySourceClauses.isEmpty`のときだけ`getTargetOnlyPredicates(spark)`で`deltaTxn.filterFiles`が呼ばれ、Z-orderのmin/max統計によるファイルプルーニングが行われます。`NOT MATCHED BY SOURCE`句があると事前にファイルを除外できず、全ファイルが対象になります。
+`notMatchedBySourceClauses.isEmpty`のときだけ`getTargetOnlyPredicates(spark)`で`deltaTxn.filterFiles`が呼ばれ、ファイルごとのmin/max統計によるプルーニングが行われます。このデータスキッピング自体はDelta Lakeの標準機能で、Z-orderやLiquid Clusteringを設定していなくても自動的に有効です。Z-orderやLiquid Clusteringは、対象列でデータが整列することでこのプルーニングの効率を上げる役割を持ちます（後述の「Z-orderやLiquid Clusteringとの関係」で詳しく触れます）。`NOT MATCHED BY SOURCE`句があると事前にファイルを除外できず、全ファイルが対象になります。
 
 ## フェーズ2：DV無効と有効の違い
 
@@ -202,7 +209,7 @@ DV無効は未変更行も含める必要があるためジョインが広め（
 ```scala
 val joinType = if (writeUnmodifiedRows) {
   // DV無効: 未変更行も書き込む必要がある
-  if (isMatchedOnly) {
+  if (shouldOptimizeMatchedOnlyMerge(spark)) {
     "rightOuter"
   } else {
     "fullOuter"
@@ -221,18 +228,20 @@ val joinType = if (writeUnmodifiedRows) {
 }
 ```
 
-`writeUnmodifiedRows`は、前述の`shouldWritePersistentDeletionVectors`の結果がそのまま渡ってくる引数です。DV無効時は`true`、DV有効時は`false`になります。DV無効側は`isMatchedOnly`（`WHEN MATCHED`句しかないか）だけで`rightOuter`/`fullOuter`の2択になりますが、DV有効側は`isMatchedOnly`・`notMatchedBySourceClauses`・`notMatchedClauses`の3つの条件を順に見ていくことで、4種類のジョインを使い分けています。
+`writeUnmodifiedRows`は、前述の`shouldWritePersistentDeletionVectors`の結果がそのまま渡ってくる引数です。DV無効時は`true`、DV有効時は`false`になります。
+
+DV無効側で使われる`shouldOptimizeMatchedOnlyMerge(spark)`は、`isMatchedOnly && spark.conf.get(MERGE_MATCHED_ONLY_ENABLED)`という定義です。つまり`WHEN MATCHED`句しかないという条件（`isMatchedOnly`）に加えて、Spark設定`MERGE_MATCHED_ONLY_ENABLED`（デフォルトは有効）がオンになっていないと`rightOuter`になりません。この設定がオフの環境では、`WHEN MATCHED`句しかない場合でも`fullOuter`になります。DV有効側は設定値に依存せず、`isMatchedOnly`・`notMatchedBySourceClauses`・`notMatchedClauses`の3つの条件を順に見ていくことで、4種類のジョインを使い分けています。
 
 ### DVが無効の場合
 
 | 条件 | ジョイン種別 |
 |---|---|
-| `WHEN MATCHED`句しかない | `Right Outer` |
-| それ以外（`NOT MATCHED`や`NOT MATCHED BY SOURCE`を含む） | `Full Outer` |
+| `WHEN MATCHED`句しかない（`MERGE_MATCHED_ONLY_ENABLED`が有効な場合） | `Right Outer` |
+| それ以外（`NOT MATCHED`や`NOT MATCHED BY SOURCE`を含む、または上記設定が無効） | `Full Outer` |
 
 ![Right Outer JoinとFull Outer Joinのベン図。Right Outerはターゲット全体、Full Outerはソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-off-join-types.png)
 
-DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。これが、DV無効時にファイル全体を書き直す動作の正体です（具体例は後述の「構文別早見表」を参照してください）。
+DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合（かつ`MERGE_MATCHED_ONLY_ENABLED`が有効な場合）でも`Right Outer`になります。これが、DV無効時にファイル全体を書き直す動作の正体です（具体例は後述の「構文別早見表」を参照してください。以降の具体例・まとめ表は`MERGE_MATCHED_ONLY_ENABLED`がデフォルト値（有効）であることを前提にしています）。
 
 ### DVが有効の場合
 
@@ -249,7 +258,7 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ## 特殊ケース：Insert-only MERGE
 
-`WHEN NOT MATCHED THEN INSERT`だけを持つMERGEは特別扱いされます。フェーズ1のジョインは`Left Anti`になり、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記で完結します。
+`WHEN NOT MATCHED THEN INSERT`だけを持つMERGEは特別扱いされます。`isInsertOnly && spark.conf.get(MERGE_INSERT_ONLY_ENABLED)`（こちらもデフォルトは有効）が成立すると、ここまで説明してきたフェーズ1の`findTouchedFiles`は**呼ばれず**、`writeOnlyInserts`という別の専用処理に分岐します。この中で`Left Anti`ジョインが使われ、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記で完結します。
 
 ![Left Anti Joinのベン図。ソースにあってターゲットにない行だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/left-anti-join.png)
 
@@ -257,7 +266,7 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ## 構文別まとめ：どのMERGE文がどのジョイン戦略になるか
 
-ここまで`WHEN`句の条件を1つずつ変えながらジョイン種別を見てきました。正直、とても複雑で理解が難しかったと思い（自分も難しい）ので最後に、実際に書く`MERGE INTO`構文のパターンごとに、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別を構文別にしてまとめます。
+ここまで`WHEN`句の条件を1つずつ変えながらジョイン種別を見てきました。正直、とても複雑で理解が難しかったと思います（自分も書きながら難しいと感じました）。最後に、実際に書く`MERGE INTO`構文のパターンごとに、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別を構文別にしてまとめます。
 
 組み合わせは次の6パターンです（`WHEN NOT MATCHED THEN INSERT`のみの構成は、前述のInsert-only MERGEとして別扱いになるためここでは除いています）。
 
@@ -425,7 +434,7 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 
 ## Z-orderやLiquid Clusteringとの関係
 
-MERGE INTOはデフォルトでソーステーブル全体をジョインの一方の入力として扱うため、Z-orderのようなファイル単位のデータスキッピングは、ソース側の絞り込み条件が狭いときにしか効きません。CDC由来のバッチのようにキーがテーブル全体に散らばっていると、スキップできる余地がほとんどなくなります。`ON`句にパーティション列などの絞り込み条件を明示することで、この事前フィルターが効くようになります。
+フェーズ1の事前絞り込み（`getTargetOnlyPredicates`）は、`ON`句のうち**ターゲット側**の列だけで判定できる条件を使います。そのためZ-orderのようなファイル単位のデータスキッピングが効くかどうかは、`ON`句にターゲットのクラスタリング対象列に対する絞り込み条件（パーティション列やZ-order対象列など）が含まれているかどうかで決まります。単純に`target.id = source.id`のようなキーだけで結合していると、ターゲット側だけで絞り込める条件が無いため、スキップできる余地がほとんどなくなります。
 
 Liquid Clusteringにも同様の弱点があります。`MERGE INTO`は対象ファイルを書き直す際、本来のクラスタリング順序を崩してしまうことがあります。これを緩和するのが[Low shuffle merge](https://learn.microsoft.com/en-us/azure/databricks/optimizations/low-shuffle-merge)です。変更されなかった行は元のレイアウトのまま新しいファイルに移す処理で、分散処理の都合上、厳密な順序保証まではしない「best-effort」の最適化です。さらに、更新・追加された行はそもそもLow shuffle mergeの対象外なので、そちらのレイアウトを整えるには別途`OPTIMIZE`の実行が必要になるとドキュメントに明記されています。
 
@@ -437,9 +446,9 @@ Delta LakeのOSSコードを読むと、`MERGE INTO`の挙動はブラックボ�
 
 とくに注目すべきところは、DVの有効・無効で書き込みコストが大きく変わる点です。DV有効なら変更対象の行だけを新規ファイルに書けばよいのに対し、DV無効だと該当ファイルを丸ごと書き直すCopy-on-Write方式になり、同じ`UPDATE`でも内部で起きていることはまったく違います。
 
-Z-orderやLiquid Clusteringによるデータスキッピングも、`MERGE INTO`に対しては万能ではありません。ソース側の絞り込み条件が狭いときにしか効かず、CDC由来のバッチのようにキーがテーブル全体に散らばっていると、クラスタリングしていてもスキップできる余地がほとんどなくなります。`ON`句にパーティション列などの絞り込み条件を明示できるかどうかが、パフォーマンスを左右します。
+Z-orderやLiquid Clusteringによるデータスキッピングも、`MERGE INTO`に対しては万能ではありません。`ON`句にターゲット側のクラスタリング対象列に対する絞り込み条件が含まれているかどうかで効くかどうかが決まり、単純なキーだけの結合条件だとスキップできる余地がほとんどなくなります。`ON`句にパーティション列などの絞り込み条件を明示できるかどうかが、パフォーマンスを左右します。
 
-今回の記事を通して内部の仕組みを知っておくと、`MERGE INTO`が重い・コストがかかると感じたときに「ソース側の条件を絞れないか」「DVを有効にできないか」といった打ち手を、憶測ではなく根拠を持って選べるようになります。
+今回の記事を通して内部の仕組みを知っておくと、`MERGE INTO`が重い・コストがかかると感じたときに「`ON`句にターゲット側の絞り込み条件を足せないか」「DVを有効にできないか」といった打ち手を、憶測ではなく根拠を持って選べるようになります。
 
 # 参考リンク
 
