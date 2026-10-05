@@ -1,8 +1,8 @@
 ---
-title: "Delta LakeのMERGE INTOを内部から理解する —— OSSコードとファイル統計で見るジョイン戦略とクラスタリングの効き方"
+title: "Delta LakeのMERGE INTOをOSSコードから読み解く —— ジョイン戦略とデータスキッピングの効き方"
 emoji: "🔀"
 type: "tech"
-topics: ["Databricks", "DeltaLake", "Spark", "SQL", "データエンジニアリング"]
+topics: ["Databricks", "DeltaLake", "Spark", "データエンジニアリング"]
 published: false
 publication_name: "ivry"
 ---
@@ -56,6 +56,8 @@ CDCパイプラインであれば「今回のバッチで届いた変更差分�
 # MERGE INTOの内部動作の詳細
 
 Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob/v3.2.0/spark/src/main/scala/org/apache/spark/sql/delta/commands/MergeIntoCommand.scala)）を見ると、`MERGE INTO`は大きく2つのフェーズで構成されていることが分かります。
+
+この先はまず用語を整理したうえで、フェーズ1・フェーズ2それぞれのジョイン種別がどう決まるかをコードベースで追い、最後に実際のMERGE文のパターン別にどう動くかを具体例と構文別まとめで確認する、という順番で見ていきます。
 
 ## 用語の整理
 
@@ -140,29 +142,7 @@ if (filesToRewrite.nonEmpty) {
 ![Inner JoinとRight Outer Joinのベン図。Innerはソースとターゲットが重なる部分だけ、Right Outerはターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase1-join-types.png)
 
 `NOT MATCHED BY SOURCE`は「ソースにマッチしなかったターゲット行」を処理対象にする句です。
-`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。
-
-### 具体例：フェーズ1のジョイン結果
-
-target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン結果へ残る行は次のようになります。
-
-**`WHEN NOT MATCHED BY SOURCE`句がない（`joinType = inner`）**
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHED） |
-| 2 | - | ○ | 残らない |
-| 3 | ○ | - | 残らない |
-
-**`WHEN NOT MATCHED BY SOURCE`句がある（`joinType = right_outer`）**
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHED） |
-| 2 | - | ○ | 残らない |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
-
-`WHEN NOT MATCHED BY SOURCE`句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります。
+`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。`WHEN NOT MATCHED BY SOURCE`句がある場合、ターゲットにしかない行もジョイン結果に残すため、そのぶん事前のZ-orderスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります（具体例は後述の「構文別早見表」で、実際のMERGE文のパターンごとに確認できます）。
 
 実際のコードでは、ジョインの前に事前のファイル絞り込みが入ります。
 
@@ -252,24 +232,7 @@ val joinType = if (writeUnmodifiedRows) {
 
 ![Right Outer JoinとFull Outer Joinのベン図。Right Outerはターゲット全体、Full Outerはソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-off-join-types.png)
 
-DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。これが、DV無効時にファイル全体を書き直す動作の正体です。
-
-**具体例**
-
-先ほどと同じtarget（`user_id=1,3`）・source（`user_id=1,2`）で、`WHEN MATCHED`句しかない場合（`joinType = rightOuter`）のジョイン結果は次の通りです。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 3 | ○ | - | 残る（該当する`WHEN`句がないためそのままコピー） |
-
-`WHEN NOT MATCHED`句なども含む場合（`joinType = fullOuter`）は、sourceにしかない行も結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残る（該当する`WHEN`句がないためそのままコピー） |
+DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。これが、DV無効時にファイル全体を書き直す動作の正体です（具体例は後述の「構文別早見表」を参照してください）。
 
 ### DVが有効の場合
 
@@ -282,39 +245,7 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ![Inner Join、Left Outer Join、Right Outer Join、Full Outer Joinのベン図。左上がInner、右上がLeft Outer、左下がRight Outer、右下がFull Outer](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-on-join-types.png)
 
-書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された行については、既存ファイルを書き直す代わりに「この行はもう無効」という印だけをDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
-
-**具体例**
-
-同じtarget・sourceで`WHEN MATCHED`句のみの場合（`joinType = inner`）のジョイン結果は次の通りです。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（変更対象として`UPDATE`） |
-| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
-
-`WHEN NOT MATCHED BY SOURCE`句がない場合（`joinType = leftOuter`）、sourceにしかない行も結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
-
-`WHEN NOT MATCHED`句がない場合（`joinType = rightOuter`）、targetにしかない行も結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
-
-全種類の`WHEN`句がある場合（`joinType = fullOuter`）は、3行すべてが結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（変更対象として`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
+書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された行については、既存ファイルを書き直す代わりに「この行はもう無効」という印だけをDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます（具体例は後述の「構文別早見表」を参照してください）。
 
 ## 特殊ケース：Insert-only MERGE
 
@@ -323,6 +254,174 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 ![Left Anti Joinのベン図。ソースにあってターゲットにない行だけが結果に残る](/images/delta-lake-merge-into-internals-and-clustering/left-anti-join.png)
 
 ![Insert-only MERGEの処理フロー。ソーステーブルとターゲットテーブルをLeft Anti Joinし、ターゲットに存在しない行だけを新規ファイルとして追記する](/images/delta-lake-merge-into-internals-and-clustering/insert-only-merge-flow.png)
+
+## 構文別まとめ：どのMERGE文がどのジョイン戦略になるか
+
+ここまで`WHEN`句の条件を1つずつ変えながらジョイン種別を見てきました。正直、とても複雑で理解が難しかったと思い（自分も難しい）ので最後に、実際に書く`MERGE INTO`構文のパターンごとに、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別を構文別にしてまとめます。
+
+組み合わせは次の6パターンです（`WHEN NOT MATCHED THEN INSERT`のみの構成は、前述のInsert-only MERGEとして別扱いになるためここでは除いています）。
+
+### ① UPDATEのみ（`WHEN MATCHED`のみ）
+既存行だけを更新する、典型的なバッチです。
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+```
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Inner |
+| フェーズ2（DV無効） | Right Outer |
+| フェーズ2（DV有効） | Inner |
+
+**具体例**
+
+target（`user_id=1,3`）・source（`user_id=1,2`）でこのMERGE文を実行すると、最終的にtargetは次のようになります。
+
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
+|---|---|---|---|
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | - | sourceにしかない行だが、該当する`WHEN`句が無いため何もしない |
+| 3 | ○ | ○（変化なし） | targetにしかない行だが、該当する`WHEN`句が無いため何もしない |
+
+### ② Upsert（`WHEN MATCHED` + `WHEN NOT MATCHED`）
+もっとも使用頻度が高い、更新と挿入をまとめて行うパターンです。
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *
+```
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Inner |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Left Outer |
+
+**具体例**
+
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。
+
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
+|---|---|---|---|
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | ○（新規） | `WHEN NOT MATCHED`に該当し`INSERT` |
+| 3 | ○ | ○（変化なし） | targetにしかない行だが、該当する`WHEN`句が無いため何もしない |
+
+### ③ 新規行を取り込まない同期（`WHEN MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
+既存行の更新とソースに存在しなくなった行の削除だけを行い、新規行は追加しません。ターゲット側のマスタを変更せずソースの更新・削除だけ反映したいときに使う形です。
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Right Outer |
+
+**具体例**
+
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。
+
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
+|---|---|---|---|
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | - | sourceにしかない行だが、該当する`WHEN`句が無いため何もしない |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
+
+### ④ 完全同期（`WHEN MATCHED` + `WHEN NOT MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
+ターゲットをソースの内容に完全一致させる、UPDATE/INSERT/DELETEすべてを含む構成です。
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Full Outer |
+
+**具体例**
+
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。
+
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
+|---|---|---|---|
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | ○（新規） | `WHEN NOT MATCHED`に該当し`INSERT` |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
+
+### ⑤ ソース消滅行のみDELETE（`WHEN NOT MATCHED BY SOURCE`のみ）
+UPDATEもINSERTもせず、ソースから消えた行だけを削除する構成です。
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Right Outer |
+
+**具体例**
+
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。`WHEN MATCHED`句が無いため、`user_id=1`はどの`WHEN`句にも該当せず変化しません。
+
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
+|---|---|---|---|
+| 1 | ○ | ○（変化なし） | targetとsourceの両方にある行だが、該当する`WHEN`句が無いため何もしない |
+| 2 | - | - | sourceにしかない行だが、該当する`WHEN`句が無いため何もしない |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
+
+### ⑥ INSERT + DELETE（`WHEN NOT MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
+既存行の更新はせず、新規追加と消滅行の削除だけを行う構成です。
+
+```sql
+MERGE INTO target USING source ON target.id = source.id
+WHEN NOT MATCHED THEN INSERT *
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+```
+
+| フェーズ | ジョイン種別 |
+|---|---|
+| フェーズ1 | Right Outer |
+| フェーズ2（DV無効） | Full Outer |
+| フェーズ2（DV有効） | Full Outer |
+
+**具体例**
+
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。`WHEN MATCHED`句が無いため、`user_id=1`はどの`WHEN`句にも該当せず変化しません。
+
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
+|---|---|---|---|
+| 1 | ○ | ○（変化なし） | targetとsourceの両方にある行だが、該当する`WHEN`句が無いため何もしない |
+| 2 | - | ○（新規） | `WHEN NOT MATCHED`に該当し`INSERT` |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
+
+### 6パターンのまとめ
+
+ここまで1パターンずつ見てきた内容を、横に並べて比較できるように1つの表にまとめます。
+
+| 構文パターン | `WHEN MATCHED` | `WHEN NOT MATCHED` | `WHEN NOT MATCHED BY SOURCE` | フェーズ1 | フェーズ2（DV無効） | フェーズ2（DV有効） |
+|---|---|---|---|---|---|---|
+| ① UPDATEのみ | ○ | - | - | Inner | Right Outer | Inner |
+| ② Upsert | ○ | ○ | - | Inner | Full Outer | Left Outer |
+| ③ 新規行を取り込まない同期 | ○ | - | ○ | Right Outer | Full Outer | Right Outer |
+| ④ 完全同期 | ○ | ○ | ○ | Right Outer | Full Outer | Full Outer |
+| ⑤ ソース消滅行のみDELETE | - | - | ○ | Right Outer | Full Outer | Right Outer |
+| ⑥ INSERT + DELETE | - | ○ | ○ | Right Outer | Full Outer | Full Outer |
 
 ## Z-orderやLiquid Clusteringとの関係
 
