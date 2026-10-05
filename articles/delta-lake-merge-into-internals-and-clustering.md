@@ -410,6 +410,8 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 
 ### 6パターンのまとめ
 
+ここまで1パターンずつ見てきた内容を、横に並べて比較できるように1つの表にまとめます。
+
 | 構文パターン | `WHEN MATCHED` | `WHEN NOT MATCHED` | `WHEN NOT MATCHED BY SOURCE` | フェーズ1 | フェーズ2（DV無効） | フェーズ2（DV有効） |
 |---|---|---|---|---|---|---|
 | ① UPDATEのみ | ○ | - | - | Inner | Right Outer | Inner |
