@@ -97,7 +97,7 @@ IVRyでは大規模テーブルの連携にクエリベースの増分更新や�
 
 ソースの全件を取得し、既存テーブルをまるごと置き換える方式です。実装がもっともシンプルです。冪等性も担保しやすく、失敗時は単純に再実行すればよいという扱いやすさがあります。
 
-Databricksでは[Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`CREATE OR REPLACE`(パーティション単位なら`REPLACE WHERE`)を定期実行する形で実現します。dbtでDWH内のモデルを構築している場合も、マテリアライゼーションを`table`に設定すれば同様に洗い替えの形でモデルが再構築されます(dbtはDWH内のモデル同士の変換を担うツールで、ソースDBへの取り込み自体は別の仕組みで行う前提です)。
+Databricksでは[Lakeflow Jobs](https://www.databricks.com/product/data-engineering/lakeflow-jobs)で`CREATE OR REPLACE`(パーティション単位なら`REPLACE WHERE`)を定期実行する形で実現します。dbtでDWH内のモデルを構築している場合も、マテリアライゼーションを`table`に設定すれば同様に洗い替えの形でモデルが再構築されます。
 
 ```mermaid
 graph LR
