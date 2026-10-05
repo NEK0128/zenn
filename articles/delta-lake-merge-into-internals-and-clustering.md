@@ -1,5 +1,5 @@
 ---
-title: "Delta LakeのMERGE INTOを内部から理解する —— OSSコードとファイル統計で見るジョイン戦略とクラスタリングの効き方"
+title: "Delta LakeのMERGE INTOをOSSコードから読み解く —— ジョイン戦略とファイルスキッピングの効き方"
 emoji: "🔀"
 type: "tech"
 topics: ["Databricks", "DeltaLake", "Spark", "SQL", "データエンジニアリング"]
