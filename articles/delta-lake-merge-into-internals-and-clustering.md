@@ -316,6 +316,26 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 | 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
 | 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
 
+## WHEN句の組み合わせ全パターンとジョイン種別
+
+ここまで`WHEN MATCHED`句しかない場合、`WHEN NOT MATCHED BY SOURCE`句がない場合など、条件を1つずつ変えながらジョイン種別を見てきました。最後に、3種類の`WHEN`句（`MATCHED` / `NOT MATCHED` / `NOT MATCHED BY SOURCE`）の有無で分かれる組み合わせを全て並べ、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別がどう決まるかを一覧にします。
+
+`MERGE INTO`は`WHEN`句を最低1つ書く必要があるため、組み合わせは2³=8通りではなく、すべて無しを除いた7通りです。
+
+| 書いた`WHEN`句 | フェーズ1 | フェーズ2（DV無効） | フェーズ2（DV有効） |
+|---|---|---|---|
+| `MATCHED` + `NOT MATCHED` + `NOT MATCHED BY SOURCE` | Right Outer | Full Outer | Full Outer |
+| `MATCHED` + `NOT MATCHED` | Inner | Full Outer | Left Outer |
+| `MATCHED` + `NOT MATCHED BY SOURCE` | Right Outer | Full Outer | Right Outer |
+| `MATCHED`のみ | Inner | Right Outer | Inner |
+| `NOT MATCHED` + `NOT MATCHED BY SOURCE` | Right Outer | Full Outer | Full Outer |
+| `NOT MATCHED`のみ | Inner | Full Outer | Left Outer |
+| `NOT MATCHED BY SOURCE`のみ | Right Outer | Full Outer | Right Outer |
+
+この表から分かるのは、`MATCHED`句を書くかどうかは、どのフェーズのジョイン種別も変えないという点です。表の1行目と5行目（`NOT MATCHED`+`NOT MATCHED BY SOURCE`の有無が同じで`MATCHED`の有無だけが違う行）を比べると、フェーズ1・フェーズ2とも完全に同じジョイン種別になっています。2行目と6行目、3行目と7行目も同様です。
+
+理由はシンプルで、前述のとおりフェーズ1のジョイン種別は`NOT MATCHED BY SOURCE`句の有無だけで決まり、フェーズ2のジョイン種別分岐も`isMatchedOnly`（`NOT MATCHED`・`NOT MATCHED BY SOURCE`がどちらも無いか）・`NOT MATCHED BY SOURCE`句の有無・`NOT MATCHED`句の有無の3つの判定だけで決まります。判定ロジック自体が`MATCHED`句の有無を直接見ていないので、結果として7パターンが実質4通りのジョイン挙動に集約されます。`WHEN`句の組み合わせを考えるときは、「`MATCHED`を書くかどうか」ではなく「`NOT MATCHED`と`NOT MATCHED BY SOURCE`をそれぞれ書くかどうか」の2択で考えると、ジョイン戦略の見通しがよくなります。
+
 ## 特殊ケース：Insert-only MERGE
 
 `WHEN NOT MATCHED THEN INSERT`だけを持つMERGEは特別扱いされます。フェーズ1のジョインは`Left Anti`になり、「ソースにあってターゲットにない行」を直接抽出します。既存ファイルを一切書き換える必要がないため、単純な追記で完結します。
