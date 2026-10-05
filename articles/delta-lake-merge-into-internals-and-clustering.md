@@ -2,7 +2,7 @@
 title: "Delta LakeのMERGE INTOをOSSコードから読み解く —— ジョイン戦略とデータスキッピングの効き方"
 emoji: "🔀"
 type: "tech"
-topics: ["Databricks", "DeltaLake", "Spark", "SQL", "データエンジニアリング"]
+topics: ["Databricks", "DeltaLake", "Spark", "データエンジニアリング"]
 published: false
 publication_name: "ivry"
 ---
@@ -56,6 +56,8 @@ CDCパイプラインであれば「今回のバッチで届いた変更差分�
 # MERGE INTOの内部動作の詳細
 
 Delta LakeのOSS実装（[delta-io/delta](https://github.com/delta-io/delta/blob/v3.2.0/spark/src/main/scala/org/apache/spark/sql/delta/commands/MergeIntoCommand.scala)）を見ると、`MERGE INTO`は大きく2つのフェーズで構成されていることが分かります。
+
+この先はまず用語を整理したうえで、フェーズ1・フェーズ2それぞれのジョイン種別がどう決まるかをコードベースで追い、最後に実際のMERGE文のパターン別にどう動くかを具体例と構文別まとめで確認する、という順番で見ていきます。
 
 ## 用語の整理
 
