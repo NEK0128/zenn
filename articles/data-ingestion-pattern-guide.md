@@ -1,5 +1,5 @@
 ---
-title: "データ取り込み方式の逆引き —— ゼロコピー、CDC、Create or Replace、クエリベース増分更新"
+title: "データ基盤におけるデータ取り込み方式の選び方 —— ゼロコピー、CDC、Create or Replace、クエリベース増分更新"
 emoji: "🔄"
 type: "tech"
 topics: ["データエンジニアリング", "Databricks", "ETL", "CDC"]
