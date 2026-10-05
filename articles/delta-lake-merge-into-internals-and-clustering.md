@@ -140,29 +140,7 @@ if (filesToRewrite.nonEmpty) {
 ![Inner JoinとRight Outer Joinのベン図。Innerはソースとターゲットが重なる部分だけ、Right Outerはターゲット全体が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase1-join-types.png)
 
 `NOT MATCHED BY SOURCE`は「ソースにマッチしなかったターゲット行」を処理対象にする句です。
-`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。
-
-### 具体例：フェーズ1のジョイン結果
-
-target（`user_id=1,3`）、source（`user_id=1,2`）で試すと、ジョイン結果へ残る行は次のようになります。
-
-**`WHEN NOT MATCHED BY SOURCE`句がない（`joinType = inner`）**
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHED） |
-| 2 | - | ○ | 残らない |
-| 3 | ○ | - | 残らない |
-
-**`WHEN NOT MATCHED BY SOURCE`句がある（`joinType = right_outer`）**
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHED） |
-| 2 | - | ○ | 残らない |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
-
-`WHEN NOT MATCHED BY SOURCE`句がある場合は`user_id=3`も残るため、そのぶん事前のZ-orderスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります。
+`Inner`のままだとそのターゲット行がジョイン結果から消えてしまうため、`Right Outer`にしてターゲット側の全行を取りこぼさないようにしています。`WHEN NOT MATCHED BY SOURCE`句がある場合、ターゲットにしかない行もジョイン結果に残すため、そのぶん事前のZ-orderスキッピングも効かなくなり、ターゲットテーブルの全ファイルが候補になります（具体例は後述の「構文別早見表」で、実際のMERGE文のパターンごとに確認できます）。
 
 実際のコードでは、ジョインの前に事前のファイル絞り込みが入ります。
 
@@ -252,24 +230,7 @@ val joinType = if (writeUnmodifiedRows) {
 
 ![Right Outer JoinとFull Outer Joinのベン図。Right Outerはターゲット全体、Full Outerはソース・ターゲットの全行が結果に残る](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-off-join-types.png)
 
-DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。これが、DV無効時にファイル全体を書き直す動作の正体です。
-
-**具体例**
-
-先ほどと同じtarget（`user_id=1,3`）・source（`user_id=1,2`）で、`WHEN MATCHED`句しかない場合（`joinType = rightOuter`）のジョイン結果は次の通りです。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 3 | ○ | - | 残る（該当する`WHEN`句がないためそのままコピー） |
-
-`WHEN NOT MATCHED`句なども含む場合（`joinType = fullOuter`）は、sourceにしかない行も結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残る（該当する`WHEN`句がないためそのままコピー） |
+DV無効時は未変更行も含めてジョイン結果をそのまま書き込む必要があるため、`WHEN MATCHED`句しかない場合でも`Right Outer`になります。これが、DV無効時にファイル全体を書き直す動作の正体です（具体例は後述の「構文別早見表」を参照してください）。
 
 ### DVが有効の場合
 
@@ -282,39 +243,7 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ![Inner Join、Left Outer Join、Right Outer Join、Full Outer Joinのベン図。左上がInner、右上がLeft Outer、左下がRight Outer、右下がFull Outer](/images/delta-lake-merge-into-internals-and-clustering/phase2-dv-on-join-types.png)
 
-書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された行については、既存ファイルを書き直す代わりに「この行はもう無効」という印だけをDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます。
-
-**具体例**
-
-同じtarget・sourceで`WHEN MATCHED`句のみの場合（`joinType = inner`）のジョイン結果は次の通りです。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（変更対象として`UPDATE`） |
-| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
-
-`WHEN NOT MATCHED BY SOURCE`句がない場合（`joinType = leftOuter`）、sourceにしかない行も結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
-
-`WHEN NOT MATCHED`句がない場合（`joinType = rightOuter`）、targetにしかない行も結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
-
-全種類の`WHEN`句がある場合（`joinType = fullOuter`）は、3行すべてが結果に残ります。
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（変更対象として`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
+書き込みは2つに分かれます。新規・更新後のデータは新規ファイルに書き込み、更新・削除された行については、既存ファイルを書き直す代わりに「この行はもう無効」という印だけをDVファイルに書き込みます。既存ファイルをコピーし直す必要がなくなるため、書き込みコストを大きく削減できます（具体例は後述の「構文別早見表」を参照してください）。
 
 ## 特殊ケース：Insert-only MERGE
 
@@ -344,9 +273,19 @@ WHEN MATCHED THEN UPDATE SET *
 | フェーズ2（DV無効） | Right Outer |
 | フェーズ2（DV有効） | Inner |
 
-**具体例（フェーズ2・DV有効時）**
+**具体例**
 
-target（`user_id=1,3`）・source（`user_id=1,2`）でジョインすると、残る行は次の通りです（`joinType = inner`）。
+target（`user_id=1,3`）・source（`user_id=1,2`）でジョインすると、残る行は次の通りです。
+
+フェーズ1（`joinType = inner`）:
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHED） |
+| 2 | - | ○ | 残らない |
+| 3 | ○ | - | 残らない |
+
+フェーズ2・DV有効時（`joinType = inner`）:
 
 | user_id | target | source | ジョイン結果 |
 |---|---|---|---|
@@ -393,9 +332,19 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 | フェーズ2（DV無効） | Full Outer |
 | フェーズ2（DV有効） | Right Outer |
 
-**具体例（フェーズ2・DV有効時）**
+**具体例**
 
-同じtarget・sourceでジョインすると、残る行は次の通りです（`joinType = rightOuter`）。
+同じtarget・sourceでジョインすると、残る行は次の通りです。
+
+フェーズ1（`joinType = right_outer`）:
+
+| user_id | target | source | ジョイン結果 |
+|---|---|---|---|
+| 1 | ○ | ○ | 残る（MATCHED） |
+| 2 | - | ○ | 残らない |
+| 3 | ○ | - | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
+
+フェーズ2・DV有効時（`joinType = rightOuter`）:
 
 | user_id | target | source | ジョイン結果 |
 |---|---|---|---|
