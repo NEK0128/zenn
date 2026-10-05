@@ -253,9 +253,9 @@ DV無効時は未変更行も含めてジョイン結果をそのまま書き込
 
 ![Insert-only MERGEの処理フロー。ソーステーブルとターゲットテーブルをLeft Anti Joinし、ターゲットに存在しない行だけを新規ファイルとして追記する](/images/delta-lake-merge-into-internals-and-clustering/insert-only-merge-flow.png)
 
-## 構文別早見表：どのMERGE文がどのジョイン戦略になるか
+## 構文別まとめ：どのMERGE文がどのジョイン戦略になるか
 
-ここまで`WHEN`句の条件を1つずつ変えながらジョイン種別を見てきました。最後に、実際に書く`MERGE INTO`構文のパターンごとに、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別を早見表としてまとめます。
+ここまで`WHEN`句の条件を1つずつ変えながらジョイン種別を見てきました。正直、とても複雑で理解が難しかったと思い（自分も難しい）ので最後に、実際に書く`MERGE INTO`構文のパターンごとに、フェーズ1・フェーズ2（DV無効・DV有効）のジョイン種別を構文別にしてまとめます。
 
 組み合わせは次の6パターンです（`WHEN NOT MATCHED THEN INSERT`のみの構成は、前述のInsert-only MERGEとして別扱いになるためここでは除いています）。
 
@@ -275,22 +275,13 @@ WHEN MATCHED THEN UPDATE SET *
 
 **具体例**
 
-target（`user_id=1,3`）・source（`user_id=1,2`）でジョインすると、残る行は次の通りです。
+target（`user_id=1,3`）・source（`user_id=1,2`）でこのMERGE文を実行すると、最終的にtargetは次のようになります。
 
-フェーズ1（`joinType = inner`）:
-
-| user_id | target | source | ジョイン結果 |
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
 |---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHED） |
-| 2 | - | ○ | 残らない |
-| 3 | ○ | - | 残らない |
-
-フェーズ2・DV有効時（`joinType = inner`）:
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | - | sourceにしかない行だが、該当する`WHEN`句が無いため何もしない |
+| 3 | ○ | ○（変化なし） | targetにしかない行だが、該当する`WHEN`句が無いため何もしない |
 
 ### ② Upsert（`WHEN MATCHED` + `WHEN NOT MATCHED`）
 もっとも使用頻度が高い、更新と挿入をまとめて行うパターンです。
@@ -307,15 +298,15 @@ WHEN NOT MATCHED THEN INSERT *
 | フェーズ2（DV無効） | Full Outer |
 | フェーズ2（DV有効） | Left Outer |
 
-**具体例（フェーズ2・DV有効時）**
+**具体例**
 
-同じtarget・sourceでジョインすると、残る行は次の通りです（`joinType = leftOuter`）。
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。
 
-| user_id | target | source | ジョイン結果 |
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
 |---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残らない（既存ファイルもDVも触られない） |
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | ○（新規） | `WHEN NOT MATCHED`に該当し`INSERT` |
+| 3 | ○ | ○（変化なし） | targetにしかない行だが、該当する`WHEN`句が無いため何もしない |
 
 ### ③ 同期的UPDATE/DELETE（`WHEN MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
 ソースに存在しなくなった行を削除する、スナップショット同期でよく使う形です。
@@ -334,22 +325,13 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 
 **具体例**
 
-同じtarget・sourceでジョインすると、残る行は次の通りです。
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。
 
-フェーズ1（`joinType = right_outer`）:
-
-| user_id | target | source | ジョイン結果 |
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
 |---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHED） |
-| 2 | - | ○ | 残らない |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCE、source側の列は全部NULL） |
-
-フェーズ2・DV有効時（`joinType = rightOuter`）:
-
-| user_id | target | source | ジョイン結果 |
-|---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | - | sourceにしかない行だが、該当する`WHEN`句が無いため何もしない |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
 
 ### ④ 完全同期（`WHEN MATCHED` + `WHEN NOT MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
 ターゲットをソースの内容に完全一致させる、UPDATE/INSERT/DELETEすべてを含む構成です。
@@ -367,15 +349,15 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 | フェーズ2（DV無効） | Full Outer |
 | フェーズ2（DV有効） | Full Outer |
 
-**具体例（フェーズ2・DV有効時）**
+**具体例**
 
-同じtarget・sourceでジョインすると、3行すべてが結果に残ります（`joinType = fullOuter`）。
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。
 
-| user_id | target | source | ジョイン結果 |
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
 |---|---|---|---|
-| 1 | ○ | ○ | 残る（MATCHEDとして`UPDATE`） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`UPDATE`/`DELETE`） |
+| 1 | ○ | ○（更新後） | `WHEN MATCHED`に該当し`UPDATE` |
+| 2 | - | ○（新規） | `WHEN NOT MATCHED`に該当し`INSERT` |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
 
 ### ⑤ ソース消滅行のみDELETE（`WHEN NOT MATCHED BY SOURCE`のみ）
 UPDATEもINSERTもせず、ソースから消えた行だけを削除する構成です。
@@ -391,14 +373,15 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 | フェーズ2（DV無効） | Full Outer |
 | フェーズ2（DV有効） | Right Outer |
 
-**具体例（フェーズ2・DV有効時）**
+**具体例**
 
-同じtarget・sourceでジョインすると、残る行は次の通りです（`joinType = rightOuter`）。`WHEN MATCHED`句が無いため、`user_id=1`はどの`WHEN`句にも該当せず、既存ファイルのまま変更されません。
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。`WHEN MATCHED`句が無いため、`user_id=1`はどの`WHEN`句にも該当せず変化しません。
 
-| user_id | target | source | ジョイン結果 |
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
 |---|---|---|---|
-| 1 | ○ | ○ | 残る（該当する`WHEN`句がないため既存ファイルのまま） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`DELETE`） |
+| 1 | ○ | ○（変化なし） | targetとsourceの両方にある行だが、該当する`WHEN`句が無いため何もしない |
+| 2 | - | - | sourceにしかない行だが、該当する`WHEN`句が無いため何もしない |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
 
 ### ⑥ INSERT + DELETE（`WHEN NOT MATCHED` + `WHEN NOT MATCHED BY SOURCE`）
 既存行の更新はせず、新規追加と消滅行の削除だけを行う構成です。
@@ -415,15 +398,15 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE
 | フェーズ2（DV無効） | Full Outer |
 | フェーズ2（DV有効） | Full Outer |
 
-**具体例（フェーズ2・DV有効時）**
+**具体例**
 
-同じtarget・sourceでジョインすると、3行すべてが結果に残ります（`joinType = fullOuter`）。`WHEN MATCHED`句が無いため、`user_id=1`はどの`WHEN`句にも該当せず、既存ファイルのまま変更されません。
+同じtarget・sourceでこのMERGE文を実行すると、最終的にtargetは次のようになります。`WHEN MATCHED`句が無いため、`user_id=1`はどの`WHEN`句にも該当せず変化しません。
 
-| user_id | target | source | ジョイン結果 |
+| user_id | 実行前のtarget | 実行後のtarget | 理由 |
 |---|---|---|---|
-| 1 | ○ | ○ | 残る（該当する`WHEN`句がないため既存ファイルのまま） |
-| 2 | - | ○ | 残る（NOT MATCHEDとして`INSERT`） |
-| 3 | ○ | - | 残る（NOT MATCHED BY SOURCEとして`DELETE`） |
+| 1 | ○ | ○（変化なし） | targetとsourceの両方にある行だが、該当する`WHEN`句が無いため何もしない |
+| 2 | - | ○（新規） | `WHEN NOT MATCHED`に該当し`INSERT` |
+| 3 | ○ | 削除 | `WHEN NOT MATCHED BY SOURCE`に該当し`DELETE` |
 
 ### 6パターンのまとめ
 
